@@ -28,6 +28,7 @@ import {
   OPENAI_FIELD_PASSTHROUGH_TYPES,
 } from '../constants'
 import type { Channel } from '../types'
+import { parseHttpStatusCodeRules } from '@/lib/http-status-code-rules'
 import {
   CHANNEL_TYPE_ADVANCED_CUSTOM,
   advancedCustomConfigUsesRelativeUpstreamPath,
@@ -216,6 +217,9 @@ export const channelFormSchema = z
     weight: z.number().optional(),
     test_model: z.string().optional(),
     auto_ban: z.number().optional(),
+    automatic_disable_override_enabled: z.boolean().optional(),
+    automatic_disable_status_codes: z.string().optional(),
+    automatic_disable_keywords: z.string().optional(),
     status: z.number(),
     status_code_mapping: z
       .string()
@@ -282,6 +286,18 @@ export const channelFormSchema = z
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
     upstream_model_update_ignored_models: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.automatic_disable_override_enabled) {
+      const parsed = parseHttpStatusCodeRules(data.automatic_disable_status_codes)
+      if (!parsed.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['automatic_disable_status_codes'],
+          message: 'Automatic disable status codes must be valid HTTP codes',
+        })
+      }
+    }
   })
   .superRefine((data, ctx) => {
     if (
@@ -414,6 +430,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   weight: 0,
   test_model: '',
   auto_ban: 1,
+  automatic_disable_override_enabled: false,
+  automatic_disable_status_codes: '',
+  automatic_disable_keywords: '',
   status: CHANNEL_STATUS.ENABLED,
   status_code_mapping: '',
   tag: '',
@@ -518,6 +537,9 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
+  let automaticDisableOverrideEnabled = false
+  let automaticDisableStatusCodes = ''
+  let automaticDisableKeywords = ''
 
   if (channel.settings) {
     try {
@@ -546,6 +568,10 @@ export function transformChannelToFormDefaults(
       if (parsed.advanced_custom) {
         advancedCustom = stringifyAdvancedCustomConfig(parsed.advanced_custom)
       }
+      automaticDisableOverrideEnabled =
+        parsed.automatic_disable_override_enabled === true
+      automaticDisableStatusCodes = parsed.automatic_disable_status_codes || ''
+      automaticDisableKeywords = parsed.automatic_disable_keywords || ''
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -597,6 +623,9 @@ export function transformChannelToFormDefaults(
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
+    automatic_disable_override_enabled: automaticDisableOverrideEnabled,
+    automatic_disable_status_codes: automaticDisableStatusCodes,
+    automatic_disable_keywords: automaticDisableKeywords,
   }
 }
 
@@ -650,6 +679,18 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.vertex_key_type = formData.vertex_key_type || 'json'
   } else if ('vertex_key_type' in settingsObj) {
     delete settingsObj.vertex_key_type
+  }
+
+  if (formData.automatic_disable_override_enabled === true) {
+    settingsObj.automatic_disable_override_enabled = true
+    settingsObj.automatic_disable_status_codes =
+      formData.automatic_disable_status_codes?.trim() || ''
+    settingsObj.automatic_disable_keywords =
+      formData.automatic_disable_keywords?.trim() || ''
+  } else {
+    delete settingsObj.automatic_disable_override_enabled
+    delete settingsObj.automatic_disable_status_codes
+    delete settingsObj.automatic_disable_keywords
   }
 
   // Add azure_responses_version for Azure channels (type 3)

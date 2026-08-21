@@ -91,6 +91,9 @@ export interface ChannelSettings {
 }
 
 export interface ChannelOtherSettings {
+  automatic_disable_override_enabled?: boolean
+  automatic_disable_status_codes?: string
+  automatic_disable_keywords?: string
   azure_responses_version?: string
   vertex_key_type?: 'json' | 'api_key'
   openrouter_enterprise?: boolean

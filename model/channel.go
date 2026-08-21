@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -983,6 +984,11 @@ func (channel *Channel) ValidateSettings() error {
 	if channelOtherSettings.AdvancedCustom != nil {
 		if err := channelOtherSettings.AdvancedCustom.Validate(); err != nil {
 			return err
+		}
+	}
+	if channelOtherSettings.AutomaticDisableOverrideEnabled {
+		if _, err := operation_setting.ParseHTTPStatusCodeRanges(channelOtherSettings.AutomaticDisableStatusCodes); err != nil {
+			return fmt.Errorf("invalid automatic disable status codes: %w", err)
 		}
 	}
 	if channel.Type == constant.ChannelTypeAdvancedCustom && channelOtherSettings.UpstreamModelUpdateCheckEnabled {

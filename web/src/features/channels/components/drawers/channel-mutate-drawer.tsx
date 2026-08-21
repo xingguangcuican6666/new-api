@@ -1007,7 +1007,10 @@ export function ChannelMutateDrawer({
     currentPriority ||
     currentWeight ||
     currentTestModel?.trim() ||
-    (currentAutoBan ?? 1) !== 1
+    (currentAutoBan ?? 1) !== 1 ||
+    form.watch('automatic_disable_override_enabled') ||
+    form.watch('automatic_disable_status_codes')?.trim() ||
+    form.watch('automatic_disable_keywords')?.trim()
   )
   const internalNotesConfigured = Boolean(
     currentTag?.trim() || currentRemark?.trim()
@@ -3579,6 +3582,61 @@ export function ChannelMutateDrawer({
                                 </FormItem>
                               )}
                             />
+
+                            <FormField
+                              control={form.control}
+                              name='automatic_disable_override_enabled'
+                              render={({ field }) => (
+                                <FormItem className='flex items-center justify-between sm:col-span-2'>
+                                  <div className='space-y-0.5'>
+                                    <FormLabel>{t('Channel Auto-disable Override')}</FormLabel>
+                                    <FormDescription>
+                                      {t('Replace global auto-disable status codes and keywords for this channel')}
+                                    </FormDescription>
+                                  </div>
+                                  <FormControl>
+                                    <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+
+                            {form.watch('automatic_disable_override_enabled') && (
+                              <>
+                                <FormField
+                                  control={form.control}
+                                  name='automatic_disable_status_codes'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('Channel Auto-disable Status Codes')}</FormLabel>
+                                      <FormControl>
+                                        <Input placeholder='401,403,500-599' {...field} />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t('Comma-separated status codes and inclusive ranges')}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='automatic_disable_keywords'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('Channel Auto-disable Keywords')}</FormLabel>
+                                      <FormControl>
+                                        <Textarea rows={4} placeholder={t('one keyword per line')} {...field} />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t('These keywords replace the global auto-disable keywords for this channel')}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
+                            )}
                           </div>
 
                           <div className='border-border/60 rounded-lg border p-4'>

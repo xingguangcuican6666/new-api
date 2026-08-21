@@ -66,6 +66,9 @@ const (
 )
 
 type ChannelOtherSettings struct {
+	AutomaticDisableOverrideEnabled       bool                  `json:"automatic_disable_override_enabled,omitempty"`
+	AutomaticDisableStatusCodes           string                `json:"automatic_disable_status_codes,omitempty"`
+	AutomaticDisableKeywords              string                `json:"automatic_disable_keywords,omitempty"`
 	AzureResponsesVersion                 string                `json:"azure_responses_version,omitempty"`
 	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"` // "json" or "api_key"
 	OpenRouterEnterprise                  *bool                 `json:"openrouter_enterprise,omitempty"`

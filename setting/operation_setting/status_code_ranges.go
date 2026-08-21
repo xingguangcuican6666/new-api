@@ -14,7 +14,7 @@ type StatusCodeRange struct {
 	End   int
 }
 
-var AutomaticDisableStatusCodeRanges = []StatusCodeRange{{Start: 401, End: 401}}
+var AutomaticDisableStatusCodeRanges = []StatusCodeRange{{Start: 401, End: 401}, {Start: 403, End: 403}}
 
 // Default behavior matches legacy hardcoded retry rules in controller/relay.go shouldRetry:
 // retry for 1xx, 3xx, 4xx(except 400/408), 5xx(except 504/524), and no retry for 2xx.
@@ -52,6 +52,10 @@ func AutomaticDisableStatusCodesFromString(s string) error {
 
 func ShouldDisableByStatusCode(code int) bool {
 	return shouldMatchStatusCodeRanges(AutomaticDisableStatusCodeRanges, code)
+}
+
+func ShouldDisableByStatusCodeRanges(ranges []StatusCodeRange, code int) bool {
+	return shouldMatchStatusCodeRanges(ranges, code)
 }
 
 func AutomaticRetryStatusCodesToString() string {
