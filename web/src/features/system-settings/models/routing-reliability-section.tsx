@@ -82,6 +82,9 @@ const createRoutingReliabilitySchema = (
       AutomaticEnableChannelEnabled: z.boolean(),
       AutomaticDisableKeywords: z.string(),
       AutomaticDisableStatusCodes: z.string(),
+      RuntimeAutomaticDisableChannelEnabled: z.boolean(),
+      RuntimeAutomaticDisableKeywords: z.string(),
+      RuntimeAutomaticDisableStatusCodes: z.string(),
       AutomaticRetryStatusCodes: z.string(),
       monitor_setting: z.object({
         auto_test_channel_enabled: z.boolean(),
@@ -126,6 +129,19 @@ const createRoutingReliabilitySchema = (
           }),
         })
       }
+
+      const runtimeDisableParsed = parseHttpStatusCodeRules(
+        values.RuntimeAutomaticDisableStatusCodes
+      )
+      if (!runtimeDisableParsed.ok) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['RuntimeAutomaticDisableStatusCodes'],
+          message: t('Invalid status code rules: {{tokens}}', {
+            tokens: runtimeDisableParsed.invalidTokens.join(', '),
+          }),
+        })
+      }
     })
 
 type RoutingReliabilitySchema = ReturnType<
@@ -142,6 +158,9 @@ type RoutingReliabilitySectionProps = {
     AutomaticEnableChannelEnabled: boolean
     AutomaticDisableKeywords: string
     AutomaticDisableStatusCodes: string
+    RuntimeAutomaticDisableChannelEnabled: boolean
+    RuntimeAutomaticDisableKeywords: string
+    RuntimeAutomaticDisableStatusCodes: string
     AutomaticRetryStatusCodes: string
     'monitor_setting.auto_test_channel_enabled': boolean
     'monitor_setting.auto_test_channel_minutes': number
@@ -161,6 +180,9 @@ type NormalizedRoutingReliabilityValues = {
   AutomaticEnableChannelEnabled: boolean
   AutomaticDisableKeywords: string
   AutomaticDisableStatusCodes: string
+  RuntimeAutomaticDisableChannelEnabled: boolean
+  RuntimeAutomaticDisableKeywords: string
+  RuntimeAutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
@@ -186,6 +208,13 @@ const buildFormDefaults = (
     defaults.AutomaticDisableKeywords ?? ''
   ),
   AutomaticDisableStatusCodes: defaults.AutomaticDisableStatusCodes ?? '',
+  RuntimeAutomaticDisableChannelEnabled:
+    defaults.RuntimeAutomaticDisableChannelEnabled,
+  RuntimeAutomaticDisableKeywords: normalizeLineEndings(
+    defaults.RuntimeAutomaticDisableKeywords ?? ''
+  ),
+  RuntimeAutomaticDisableStatusCodes:
+    defaults.RuntimeAutomaticDisableStatusCodes ?? '',
   AutomaticRetryStatusCodes: defaults.AutomaticRetryStatusCodes ?? '',
   monitor_setting: {
     auto_test_channel_enabled:
@@ -213,6 +242,14 @@ const normalizeDefaults = (
   AutomaticDisableStatusCodes: parseHttpStatusCodeRules(
     defaults.AutomaticDisableStatusCodes ?? ''
   ).normalized,
+  RuntimeAutomaticDisableChannelEnabled:
+    defaults.RuntimeAutomaticDisableChannelEnabled,
+  RuntimeAutomaticDisableKeywords: normalizeLineEndings(
+    defaults.RuntimeAutomaticDisableKeywords ?? ''
+  ),
+  RuntimeAutomaticDisableStatusCodes: parseHttpStatusCodeRules(
+    defaults.RuntimeAutomaticDisableStatusCodes ?? ''
+  ).normalized,
   AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
     defaults.AutomaticRetryStatusCodes ?? ''
   ).normalized,
@@ -239,6 +276,14 @@ const normalizeFormValues = (
   ),
   AutomaticDisableStatusCodes: parseHttpStatusCodeRules(
     values.AutomaticDisableStatusCodes
+  ).normalized,
+  RuntimeAutomaticDisableChannelEnabled:
+    values.RuntimeAutomaticDisableChannelEnabled,
+  RuntimeAutomaticDisableKeywords: normalizeLineEndings(
+    values.RuntimeAutomaticDisableKeywords
+  ),
+  RuntimeAutomaticDisableStatusCodes: parseHttpStatusCodeRules(
+    values.RuntimeAutomaticDisableStatusCodes
   ).normalized,
   AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
     values.AutomaticRetryStatusCodes
@@ -279,6 +324,9 @@ export function RoutingReliabilitySection({
   useResetForm(form, formDefaults)
 
   const autoDisableStatusCodes = form.watch('AutomaticDisableStatusCodes')
+  const runtimeAutoDisableStatusCodes = form.watch(
+    'RuntimeAutomaticDisableStatusCodes'
+  )
   const autoRetryStatusCodes = form.watch('AutomaticRetryStatusCodes')
   const channelTestMode = form.watch('monitor_setting.channel_test_mode')
   let channelTestModeDescription: string
@@ -305,6 +353,10 @@ export function RoutingReliabilitySection({
   const autoRetryParsed = useMemo(
     () => parseHttpStatusCodeRules(autoRetryStatusCodes),
     [autoRetryStatusCodes]
+  )
+  const runtimeAutoDisableParsed = useMemo(
+    () => parseHttpStatusCodeRules(runtimeAutoDisableStatusCodes),
+    [runtimeAutoDisableStatusCodes]
   )
 
   const onSubmit = async (values: RoutingReliabilityFormValues) => {
@@ -389,6 +441,101 @@ export function RoutingReliabilitySection({
                             {t('Normalized:')} {autoRetryParsed.normalized}
                           </span>
                         )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className='flex min-w-0 flex-col gap-4'>
+            <div className='flex flex-col gap-1'>
+              <h4 className='text-sm font-medium'>
+                {t('Runtime auto-disable')}
+              </h4>
+              <p className='text-muted-foreground text-sm'>
+                {t(
+                  'Applies only to errors returned during real user relay requests.'
+                )}
+              </p>
+            </div>
+            <div className='grid min-w-0 gap-6 lg:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='RuntimeAutomaticDisableChannelEnabled'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>{t('Enable runtime auto-disable')}</FormLabel>
+                      <FormDescription>
+                        {t(
+                          'Disable the current key in a multi-key channel, or the whole channel otherwise, when a runtime rule matches.'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='RuntimeAutomaticDisableStatusCodes'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Runtime error status codes')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t('e.g. 401, 403, 429, 500-599')}
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Accepts comma-separated status codes and inclusive ranges.'
+                      )}{' '}
+                      {runtimeAutoDisableParsed.ok &&
+                        runtimeAutoDisableParsed.normalized &&
+                        runtimeAutoDisableParsed.normalized !==
+                          field.value.trim() && (
+                          <span className='text-muted-foreground'>
+                            {t('Normalized:')}{' '}
+                            {runtimeAutoDisableParsed.normalized}
+                          </span>
+                        )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='RuntimeAutomaticDisableKeywords'
+                render={({ field }) => (
+                  <FormItem className='lg:col-span-2'>
+                    <FormLabel>{t('Runtime error keywords')}</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        rows={6}
+                        placeholder={t('one keyword per line')}
+                        {...field}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'A case-insensitive match in an upstream error returned to a real user request triggers runtime auto-disable.'
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -562,7 +709,9 @@ export function RoutingReliabilitySection({
 
           <div className='flex min-w-0 flex-col gap-4'>
             <div className='flex flex-col gap-1'>
-              <h4 className='text-sm font-medium'>{t('Auto-disable rules')}</h4>
+              <h4 className='text-sm font-medium'>
+                {t('Test auto-disable rules')}
+              </h4>
             </div>
             <div className='grid min-w-0 gap-6 lg:grid-cols-2'>
               <FormField

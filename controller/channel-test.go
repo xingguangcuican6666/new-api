@@ -924,8 +924,7 @@ func testChannelForHealthCheck(ctx context.Context, channel *model.Channel, test
 	shouldBanChannel := false
 	newAPIError := result.newAPIError
 	if newAPIError != nil {
-		channelSettings := channel.GetOtherSettings()
-		shouldBanChannel = service.ShouldDisableChannel(result.newAPIError, &channelSettings)
+		shouldBanChannel = service.ShouldDisableChannel(result.newAPIError)
 	}
 
 	if common.AutomaticDisableChannelEnabled && !shouldBanChannel {
@@ -943,8 +942,7 @@ func testChannelForHealthCheck(ctx context.Context, channel *model.Channel, test
 	}
 
 	if allowDisable && isChannelEnabled && shouldBanChannel && channel.GetAutoBan() {
-		channelSettings := channel.GetOtherSettings()
-		processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, &channelSettings)
+		processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, nil, false)
 		summary.Disabled++
 	}
 

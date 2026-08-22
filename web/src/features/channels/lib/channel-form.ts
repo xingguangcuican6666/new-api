@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
+import { t } from 'i18next'
 
 import {
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
@@ -217,9 +218,9 @@ export const channelFormSchema = z
     weight: z.number().optional(),
     test_model: z.string().optional(),
     auto_ban: z.number().optional(),
-    automatic_disable_override_enabled: z.boolean().optional(),
-    automatic_disable_status_codes: z.string().optional(),
-    automatic_disable_keywords: z.string().optional(),
+    runtime_automatic_disable_override_enabled: z.boolean().optional(),
+    runtime_automatic_disable_status_codes: z.string().optional(),
+    runtime_automatic_disable_keywords: z.string().optional(),
     status: z.number(),
     status_code_mapping: z
       .string()
@@ -288,13 +289,15 @@ export const channelFormSchema = z
     upstream_model_update_ignored_models: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.automatic_disable_override_enabled) {
-      const parsed = parseHttpStatusCodeRules(data.automatic_disable_status_codes)
+    if (data.runtime_automatic_disable_override_enabled) {
+      const parsed = parseHttpStatusCodeRules(
+        data.runtime_automatic_disable_status_codes
+      )
       if (!parsed.ok) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['automatic_disable_status_codes'],
-          message: 'Automatic disable status codes must be valid HTTP codes',
+          path: ['runtime_automatic_disable_status_codes'],
+          message: t('Automatic disable status codes must be valid HTTP codes'),
         })
       }
     }
@@ -430,9 +433,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   weight: 0,
   test_model: '',
   auto_ban: 1,
-  automatic_disable_override_enabled: false,
-  automatic_disable_status_codes: '',
-  automatic_disable_keywords: '',
+  runtime_automatic_disable_override_enabled: false,
+  runtime_automatic_disable_status_codes: '',
+  runtime_automatic_disable_keywords: '',
   status: CHANNEL_STATUS.ENABLED,
   status_code_mapping: '',
   tag: '',
@@ -569,9 +572,16 @@ export function transformChannelToFormDefaults(
         advancedCustom = stringifyAdvancedCustomConfig(parsed.advanced_custom)
       }
       automaticDisableOverrideEnabled =
+        parsed.runtime_automatic_disable_override_enabled === true ||
         parsed.automatic_disable_override_enabled === true
-      automaticDisableStatusCodes = parsed.automatic_disable_status_codes || ''
-      automaticDisableKeywords = parsed.automatic_disable_keywords || ''
+      automaticDisableStatusCodes =
+        parsed.runtime_automatic_disable_status_codes ||
+        parsed.automatic_disable_status_codes ||
+        ''
+      automaticDisableKeywords =
+        parsed.runtime_automatic_disable_keywords ||
+        parsed.automatic_disable_keywords ||
+        ''
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -623,9 +633,9 @@ export function transformChannelToFormDefaults(
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
-    automatic_disable_override_enabled: automaticDisableOverrideEnabled,
-    automatic_disable_status_codes: automaticDisableStatusCodes,
-    automatic_disable_keywords: automaticDisableKeywords,
+    runtime_automatic_disable_override_enabled: automaticDisableOverrideEnabled,
+    runtime_automatic_disable_status_codes: automaticDisableStatusCodes,
+    runtime_automatic_disable_keywords: automaticDisableKeywords,
   }
 }
 
@@ -681,17 +691,20 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     delete settingsObj.vertex_key_type
   }
 
-  if (formData.automatic_disable_override_enabled === true) {
-    settingsObj.automatic_disable_override_enabled = true
-    settingsObj.automatic_disable_status_codes =
-      formData.automatic_disable_status_codes?.trim() || ''
-    settingsObj.automatic_disable_keywords =
-      formData.automatic_disable_keywords?.trim() || ''
+  if (formData.runtime_automatic_disable_override_enabled === true) {
+    settingsObj.runtime_automatic_disable_override_enabled = true
+    settingsObj.runtime_automatic_disable_status_codes =
+      formData.runtime_automatic_disable_status_codes?.trim() || ''
+    settingsObj.runtime_automatic_disable_keywords =
+      formData.runtime_automatic_disable_keywords?.trim() || ''
   } else {
-    delete settingsObj.automatic_disable_override_enabled
-    delete settingsObj.automatic_disable_status_codes
-    delete settingsObj.automatic_disable_keywords
+    delete settingsObj.runtime_automatic_disable_override_enabled
+    delete settingsObj.runtime_automatic_disable_status_codes
+    delete settingsObj.runtime_automatic_disable_keywords
   }
+  delete settingsObj.automatic_disable_override_enabled
+  delete settingsObj.automatic_disable_status_codes
+  delete settingsObj.automatic_disable_keywords
 
   // Add azure_responses_version for Azure channels (type 3)
   if (formData.type === 3 && formData.azure_responses_version) {

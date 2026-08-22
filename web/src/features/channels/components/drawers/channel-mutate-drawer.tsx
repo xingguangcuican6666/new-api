@@ -1008,9 +1008,9 @@ export function ChannelMutateDrawer({
     currentWeight ||
     currentTestModel?.trim() ||
     (currentAutoBan ?? 1) !== 1 ||
-    form.watch('automatic_disable_override_enabled') ||
-    form.watch('automatic_disable_status_codes')?.trim() ||
-    form.watch('automatic_disable_keywords')?.trim()
+    form.watch('runtime_automatic_disable_override_enabled') ||
+    form.watch('runtime_automatic_disable_status_codes')?.trim() ||
+    form.watch('runtime_automatic_disable_keywords')?.trim()
   )
   const internalNotesConfigured = Boolean(
     currentTag?.trim() || currentRemark?.trim()
@@ -3585,13 +3585,13 @@ export function ChannelMutateDrawer({
 
                             <FormField
                               control={form.control}
-                              name='automatic_disable_override_enabled'
+                              name='runtime_automatic_disable_override_enabled'
                               render={({ field }) => (
                                 <FormItem className='flex items-center justify-between sm:col-span-2'>
                                   <div className='space-y-0.5'>
-                                    <FormLabel>{t('Channel Auto-disable Override')}</FormLabel>
+                                    <FormLabel>{t('Runtime auto-disable rules')}</FormLabel>
                                     <FormDescription>
-                                      {t('Replace global auto-disable status codes and keywords for this channel')}
+                                      {t('Use channel-specific runtime rules instead of the global auto-disable rules')}
                                     </FormDescription>
                                   </div>
                                   <FormControl>
@@ -3601,14 +3601,14 @@ export function ChannelMutateDrawer({
                               )}
                             />
 
-                            {form.watch('automatic_disable_override_enabled') && (
+                            {form.watch('runtime_automatic_disable_override_enabled') && (
                               <>
                                 <FormField
                                   control={form.control}
-                                  name='automatic_disable_status_codes'
+                                  name='runtime_automatic_disable_status_codes'
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>{t('Channel Auto-disable Status Codes')}</FormLabel>
+                                      <FormLabel>{t('Runtime error status codes')}</FormLabel>
                                       <FormControl>
                                         <Input placeholder='401,403,500-599' {...field} />
                                       </FormControl>
@@ -3621,15 +3621,15 @@ export function ChannelMutateDrawer({
                                 />
                                 <FormField
                                   control={form.control}
-                                  name='automatic_disable_keywords'
+                                  name='runtime_automatic_disable_keywords'
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>{t('Channel Auto-disable Keywords')}</FormLabel>
+                                      <FormLabel>{t('Runtime error keywords')}</FormLabel>
                                       <FormControl>
                                         <Textarea rows={4} placeholder={t('one keyword per line')} {...field} />
                                       </FormControl>
                                       <FormDescription>
-                                        {t('These keywords replace the global auto-disable keywords for this channel')}
+                                        {t('A matching live relay error disables the current key for a multi-key channel, or disables the channel otherwise')}
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>

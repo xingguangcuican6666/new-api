@@ -986,9 +986,14 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	if channelOtherSettings.RuntimeAutomaticDisableOverrideEnabled {
+		if _, err := operation_setting.ParseHTTPStatusCodeRanges(channelOtherSettings.RuntimeAutomaticDisableStatusCodes); err != nil {
+			return fmt.Errorf("invalid runtime automatic disable status codes: %w", err)
+		}
+	}
 	if channelOtherSettings.AutomaticDisableOverrideEnabled {
 		if _, err := operation_setting.ParseHTTPStatusCodeRanges(channelOtherSettings.AutomaticDisableStatusCodes); err != nil {
-			return fmt.Errorf("invalid automatic disable status codes: %w", err)
+			return fmt.Errorf("invalid runtime automatic disable status codes: %w", err)
 		}
 	}
 	if channel.Type == constant.ChannelTypeAdvancedCustom && channelOtherSettings.UpstreamModelUpdateCheckEnabled {

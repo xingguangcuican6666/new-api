@@ -232,6 +232,9 @@ export type ModelSettings = {
   AutomaticEnableChannelEnabled: boolean
   AutomaticDisableKeywords: string
   AutomaticDisableStatusCodes: string
+  RuntimeAutomaticDisableChannelEnabled: boolean
+  RuntimeAutomaticDisableKeywords: string
+  RuntimeAutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number

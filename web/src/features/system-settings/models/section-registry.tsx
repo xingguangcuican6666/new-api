@@ -78,6 +78,12 @@ const MODELS_SECTIONS = [
           AutomaticEnableChannelEnabled: settings.AutomaticEnableChannelEnabled,
           AutomaticDisableKeywords: settings.AutomaticDisableKeywords,
           AutomaticDisableStatusCodes: settings.AutomaticDisableStatusCodes,
+          RuntimeAutomaticDisableChannelEnabled:
+            settings.RuntimeAutomaticDisableChannelEnabled,
+          RuntimeAutomaticDisableKeywords:
+            settings.RuntimeAutomaticDisableKeywords,
+          RuntimeAutomaticDisableStatusCodes:
+            settings.RuntimeAutomaticDisableStatusCodes,
           AutomaticRetryStatusCodes: settings.AutomaticRetryStatusCodes,
           'monitor_setting.auto_test_channel_enabled':
             settings['monitor_setting.auto_test_channel_enabled'],
