@@ -75,8 +75,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Keep one stable cache namespace so main pushes and release tags
+          # can reuse the same dependency and build layers.
+          cache-from: type=gha,scope=new-api
+          cache-to: type=gha,scope=new-api,mode=max,ignore-error=true
           provenance: mode=max
           sbom: true
 
