@@ -129,6 +129,7 @@ var AutomaticDisableChannelEnabled = false
 var RuntimeAutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false
 var EmptyResponseRetryEnabled = false
+var EmptyResponseRetryInPlaceEnabled = true
 var QuotaRemindThreshold = 1000
 var PreConsumedQuota = 500
 

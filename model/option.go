@@ -49,6 +49,7 @@ func InitOptionMap() {
 	common.OptionMap["RuntimeAutomaticDisableChannelEnabled"] = strconv.FormatBool(common.RuntimeAutomaticDisableChannelEnabled)
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["EmptyResponseRetryEnabled"] = strconv.FormatBool(common.EmptyResponseRetryEnabled)
+	common.OptionMap["EmptyResponseRetryInPlaceEnabled"] = strconv.FormatBool(common.EmptyResponseRetryInPlaceEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
@@ -342,6 +343,8 @@ func updateOptionMap(key string, value string) (err error) {
 			common.AutomaticEnableChannelEnabled = boolValue
 		case "EmptyResponseRetryEnabled":
 			common.EmptyResponseRetryEnabled = boolValue
+		case "EmptyResponseRetryInPlaceEnabled":
+			common.EmptyResponseRetryInPlaceEnabled = boolValue
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
 		case "DisplayInCurrencyEnabled":

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -99,6 +100,79 @@ func TestPingDataStopsWithholding(t *testing.T) {
 	assert.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 
 	require.Nil(t, guard.Commit(&dto.Usage{}), "a client that has been pinged can no longer be retried")
+}
+
+func TestEmptyResponseRetrySettingResolution(t *testing.T) {
+	cases := []struct {
+		name             string
+		globalEnabled    bool
+		globalInPlace    bool
+		settings         dto.ChannelOtherSettings
+		wantEnabled      bool
+		wantRetryInPlace bool
+	}{
+		{
+			name:             "follows global when the channel does not override",
+			globalEnabled:    true,
+			globalInPlace:    true,
+			settings:         dto.ChannelOtherSettings{},
+			wantEnabled:      true,
+			wantRetryInPlace: true,
+		},
+		{
+			name:          "channel override turns the feature off",
+			globalEnabled: true,
+			globalInPlace: true,
+			settings: dto.ChannelOtherSettings{
+				EmptyResponseRetryOverrideEnabled: true,
+			},
+			wantEnabled:      false,
+			wantRetryInPlace: false,
+		},
+		{
+			name:          "channel override turns the feature on and keeps retries in place",
+			globalEnabled: false,
+			globalInPlace: false,
+			settings: dto.ChannelOtherSettings{
+				EmptyResponseRetryOverrideEnabled: true,
+				EmptyResponseRetryEnabled:         true,
+				EmptyResponseRetryInPlace:         true,
+			},
+			wantEnabled:      true,
+			wantRetryInPlace: true,
+		},
+		{
+			name:          "channel override asks for another channel instead",
+			globalEnabled: false,
+			globalInPlace: true,
+			settings: dto.ChannelOtherSettings{
+				EmptyResponseRetryOverrideEnabled: true,
+				EmptyResponseRetryEnabled:         true,
+			},
+			wantEnabled:      true,
+			wantRetryInPlace: false,
+		},
+	}
+
+	originalEnabled := common.EmptyResponseRetryEnabled
+	originalInPlace := common.EmptyResponseRetryInPlaceEnabled
+	t.Cleanup(func() {
+		common.EmptyResponseRetryEnabled = originalEnabled
+		common.EmptyResponseRetryInPlaceEnabled = originalInPlace
+	})
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			common.EmptyResponseRetryEnabled = testCase.globalEnabled
+			common.EmptyResponseRetryInPlaceEnabled = testCase.globalInPlace
+
+			info := &relaycommon.RelayInfo{
+				ChannelMeta: &relaycommon.ChannelMeta{ChannelOtherSettings: testCase.settings},
+			}
+			assert.Equal(t, testCase.wantEnabled, EmptyResponseRetryEnabled(info))
+			assert.Equal(t, testCase.wantRetryInPlace, EmptyResponseRetryInPlaceEnabled(info))
+		})
+	}
 }
 
 func TestIsEmptyUpstreamResponse(t *testing.T) {

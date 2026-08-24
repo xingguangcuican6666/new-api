@@ -87,6 +87,7 @@ const createRoutingReliabilitySchema = (
       RuntimeAutomaticDisableStatusCodes: z.string(),
       AutomaticRetryStatusCodes: z.string(),
       EmptyResponseRetryEnabled: z.boolean(),
+      EmptyResponseRetryInPlaceEnabled: z.boolean(),
       monitor_setting: z.object({
         auto_test_channel_enabled: z.boolean(),
         auto_test_channel_minutes: z.coerce
@@ -164,6 +165,7 @@ type RoutingReliabilitySectionProps = {
     RuntimeAutomaticDisableStatusCodes: string
     AutomaticRetryStatusCodes: string
     EmptyResponseRetryEnabled: boolean
+    EmptyResponseRetryInPlaceEnabled: boolean
     'monitor_setting.auto_test_channel_enabled': boolean
     'monitor_setting.auto_test_channel_minutes': number
     'monitor_setting.channel_test_concurrency': number
@@ -187,6 +189,7 @@ type NormalizedRoutingReliabilityValues = {
   RuntimeAutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
   EmptyResponseRetryEnabled: boolean
+  EmptyResponseRetryInPlaceEnabled: boolean
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
   'monitor_setting.channel_test_concurrency': number
@@ -220,6 +223,7 @@ const buildFormDefaults = (
     defaults.RuntimeAutomaticDisableStatusCodes ?? '',
   AutomaticRetryStatusCodes: defaults.AutomaticRetryStatusCodes ?? '',
   EmptyResponseRetryEnabled: defaults.EmptyResponseRetryEnabled,
+  EmptyResponseRetryInPlaceEnabled: defaults.EmptyResponseRetryInPlaceEnabled,
   monitor_setting: {
     auto_test_channel_enabled:
       defaults['monitor_setting.auto_test_channel_enabled'],
@@ -258,6 +262,7 @@ const normalizeDefaults = (
     defaults.AutomaticRetryStatusCodes ?? ''
   ).normalized,
   EmptyResponseRetryEnabled: defaults.EmptyResponseRetryEnabled,
+  EmptyResponseRetryInPlaceEnabled: defaults.EmptyResponseRetryInPlaceEnabled,
   'monitor_setting.auto_test_channel_enabled':
     defaults['monitor_setting.auto_test_channel_enabled'],
   'monitor_setting.auto_test_channel_minutes':
@@ -294,6 +299,7 @@ const normalizeFormValues = (
     values.AutomaticRetryStatusCodes
   ).normalized,
   EmptyResponseRetryEnabled: values.EmptyResponseRetryEnabled,
+  EmptyResponseRetryInPlaceEnabled: values.EmptyResponseRetryInPlaceEnabled,
   'monitor_setting.auto_test_channel_enabled':
     values.monitor_setting.auto_test_channel_enabled,
   'monitor_setting.auto_test_channel_minutes':
@@ -462,7 +468,30 @@ export function RoutingReliabilitySection({
                       <FormLabel>{t('Retry empty responses')}</FormLabel>
                       <FormDescription>
                         {t(
-                          'Treat an upstream 200 that carries no content and no output tokens as a failure: the reply is withheld from the client and another channel is tried.'
+                          'Treat an upstream 200 that carries no content and no output tokens as a failure. The reply is withheld from the client and the request is retried.'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='EmptyResponseRetryInPlaceEnabled'
+                render={({ field }) => (
+                  <SettingsSwitchItem className='xl:col-span-2'>
+                    <SettingsSwitchContent>
+                      <FormLabel>{t('Retry on the same channel')}</FormLabel>
+                      <FormDescription>
+                        {t(
+                          'Retry an empty response on the same channel and key until the retry limit is reached, instead of switching to another channel.'
                         )}
                       </FormDescription>
                     </SettingsSwitchContent>

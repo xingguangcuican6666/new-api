@@ -68,6 +68,7 @@ const defaultModelSettings: ModelSettings = {
   AutomaticDisableChannelEnabled: false,
   AutomaticEnableChannelEnabled: false,
   EmptyResponseRetryEnabled: false,
+  EmptyResponseRetryInPlaceEnabled: true,
   AutomaticDisableKeywords: '',
   AutomaticDisableStatusCodes: '401',
   RuntimeAutomaticDisableChannelEnabled: false,

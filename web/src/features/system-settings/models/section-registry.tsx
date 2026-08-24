@@ -77,6 +77,8 @@ const MODELS_SECTIONS = [
             settings.AutomaticDisableChannelEnabled,
           AutomaticEnableChannelEnabled: settings.AutomaticEnableChannelEnabled,
           EmptyResponseRetryEnabled: settings.EmptyResponseRetryEnabled,
+          EmptyResponseRetryInPlaceEnabled:
+            settings.EmptyResponseRetryInPlaceEnabled,
           AutomaticDisableKeywords: settings.AutomaticDisableKeywords,
           AutomaticDisableStatusCodes: settings.AutomaticDisableStatusCodes,
           RuntimeAutomaticDisableChannelEnabled:

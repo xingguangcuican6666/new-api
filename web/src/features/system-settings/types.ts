@@ -231,6 +231,7 @@ export type ModelSettings = {
   AutomaticDisableChannelEnabled: boolean
   AutomaticEnableChannelEnabled: boolean
   EmptyResponseRetryEnabled: boolean
+  EmptyResponseRetryInPlaceEnabled: boolean
   AutomaticDisableKeywords: string
   AutomaticDisableStatusCodes: string
   RuntimeAutomaticDisableChannelEnabled: boolean

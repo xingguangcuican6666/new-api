@@ -67,6 +67,20 @@ func EmptyResponseRetryEnabled(info *relaycommon.RelayInfo) bool {
 	return common.EmptyResponseRetryEnabled
 }
 
+// EmptyResponseRetryInPlaceEnabled reports whether an empty response should be
+// retried on the same channel and key, up to the retry limit, instead of moving
+// to the next candidate channel. The per-channel override that governs empty
+// response retry governs this too.
+func EmptyResponseRetryInPlaceEnabled(info *relaycommon.RelayInfo) bool {
+	if info == nil || info.ChannelMeta == nil {
+		return common.EmptyResponseRetryInPlaceEnabled
+	}
+	if info.ChannelOtherSettings.EmptyResponseRetryOverrideEnabled {
+		return info.ChannelOtherSettings.EmptyResponseRetryInPlace
+	}
+	return common.EmptyResponseRetryInPlaceEnabled
+}
+
 // Release hands the withheld response to the client and stops intercepting.
 func (g *EmptyResponseGuard) Release() {
 	if g == nil || g.writer == nil {

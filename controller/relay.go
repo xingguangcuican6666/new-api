@@ -191,13 +191,22 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
 
+	// channel and retrySameChannel outlive one iteration so an empty upstream
+	// response can be retried on the very same channel and key instead of moving
+	// on to the next candidate.
+	var channel *model.Channel
+	retrySameChannel := false
+
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
-		channel, channelErr := getChannel(c, relayInfo, retryParam)
-		if channelErr != nil {
-			logger.LogError(c, channelErr.Error())
-			newAPIError = channelErr
-			break
+		if !retrySameChannel || channel == nil {
+			selectedChannel, channelErr := getChannel(c, relayInfo, retryParam)
+			if channelErr != nil {
+				logger.LogError(c, channelErr.Error())
+				newAPIError = channelErr
+				break
+			}
+			channel = selectedChannel
 		}
 		addUsedChannel(c, channel.Id)
 		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
@@ -238,6 +247,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		channelSettings := channel.GetOtherSettings()
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, &channelSettings, true)
+
+		retrySameChannel = types.IsEmptyResponseRetryError(newAPIError) && helper.EmptyResponseRetryInPlaceEnabled(relayInfo)
 
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
 			break
@@ -348,7 +359,7 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
-	if openaiErr.GetErrorCode() == types.ErrorCodeEmptyResponseRetry {
+	if types.IsEmptyResponseRetryError(openaiErr) {
 		// Nothing reached the client, and retrying is the whole point of the
 		// empty-response switch, so it does not go through the status code rules.
 		return true

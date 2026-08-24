@@ -223,6 +223,7 @@ export const channelFormSchema = z
     runtime_automatic_disable_keywords: z.string().optional(),
     empty_response_retry_override_enabled: z.boolean().optional(),
     empty_response_retry_enabled: z.boolean().optional(),
+    empty_response_retry_in_place: z.boolean().optional(),
     status: z.number(),
     status_code_mapping: z
       .string()
@@ -440,6 +441,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   runtime_automatic_disable_keywords: '',
   empty_response_retry_override_enabled: false,
   empty_response_retry_enabled: false,
+  empty_response_retry_in_place: true,
   status: CHANNEL_STATUS.ENABLED,
   status_code_mapping: '',
   tag: '',
@@ -549,6 +551,7 @@ export function transformChannelToFormDefaults(
   let automaticDisableKeywords = ''
   let emptyResponseRetryOverrideEnabled = false
   let emptyResponseRetryEnabled = false
+  let emptyResponseRetryInPlace = true
 
   if (channel.settings) {
     try {
@@ -591,6 +594,7 @@ export function transformChannelToFormDefaults(
       emptyResponseRetryOverrideEnabled =
         parsed.empty_response_retry_override_enabled === true
       emptyResponseRetryEnabled = parsed.empty_response_retry_enabled === true
+      emptyResponseRetryInPlace = parsed.empty_response_retry_in_place === true
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -647,6 +651,7 @@ export function transformChannelToFormDefaults(
     runtime_automatic_disable_keywords: automaticDisableKeywords,
     empty_response_retry_override_enabled: emptyResponseRetryOverrideEnabled,
     empty_response_retry_enabled: emptyResponseRetryEnabled,
+    empty_response_retry_in_place: emptyResponseRetryInPlace,
   }
 }
 
@@ -721,9 +726,12 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.empty_response_retry_override_enabled = true
     settingsObj.empty_response_retry_enabled =
       formData.empty_response_retry_enabled === true
+    settingsObj.empty_response_retry_in_place =
+      formData.empty_response_retry_in_place === true
   } else {
     delete settingsObj.empty_response_retry_override_enabled
     delete settingsObj.empty_response_retry_enabled
+    delete settingsObj.empty_response_retry_in_place
   }
 
   // Add azure_responses_version for Azure channels (type 3)

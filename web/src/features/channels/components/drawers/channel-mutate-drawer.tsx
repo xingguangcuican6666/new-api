@@ -3658,23 +3658,42 @@ export function ChannelMutateDrawer({
                             />
 
                             {form.watch('empty_response_retry_override_enabled') && (
-                              <FormField
-                                control={form.control}
-                                name='empty_response_retry_enabled'
-                                render={({ field }) => (
-                                  <FormItem className='flex items-center justify-between sm:col-span-2'>
-                                    <div className='space-y-0.5'>
-                                      <FormLabel>{t('Retry empty responses')}</FormLabel>
-                                      <FormDescription>
-                                        {t('Treat an upstream 200 that carries no content and no output tokens as a failure: the reply is withheld from the client and another channel is tried.')}
-                                      </FormDescription>
-                                    </div>
-                                    <FormControl>
-                                      <Switch checked={field.value === true} onCheckedChange={field.onChange} />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
-                              />
+                              <>
+                                <FormField
+                                  control={form.control}
+                                  name='empty_response_retry_enabled'
+                                  render={({ field }) => (
+                                    <FormItem className='flex items-center justify-between sm:col-span-2'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel>{t('Retry empty responses')}</FormLabel>
+                                        <FormDescription>
+                                          {t('Treat an upstream 200 that carries no content and no output tokens as a failure. The reply is withheld from the client and the request is retried.')}
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='empty_response_retry_in_place'
+                                  render={({ field }) => (
+                                    <FormItem className='flex items-center justify-between sm:col-span-2'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel>{t('Retry on the same channel')}</FormLabel>
+                                        <FormDescription>
+                                          {t('Retry an empty response on the same channel and key until the retry limit is reached, instead of switching to another channel.')}
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
                             )}
                           </div>
 

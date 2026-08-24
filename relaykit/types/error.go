@@ -381,6 +381,15 @@ func IsSkipRetryError(err *NewAPIError) bool {
 	return err.skipRetry
 }
 
+// IsEmptyResponseRetryError reports whether err is the failure synthesized for an
+// upstream 200 that carried no output and was withheld from the client.
+func IsEmptyResponseRetryError(err *NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return err.errorCode == ErrorCodeEmptyResponseRetry
+}
+
 func ErrOptionWithSkipRetry() NewAPIErrorOptions {
 	return func(e *NewAPIError) {
 		e.skipRetry = true
