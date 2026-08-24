@@ -193,10 +193,15 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
+	emptyGuard := helper.BeginEmptyResponseGuard(c, info)
 	usage, openaiErr := adaptor.DoResponse(c, resp.(*http.Response), info)
 	if openaiErr != nil {
+		emptyGuard.Release()
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 		return openaiErr
+	}
+	if emptyErr := emptyGuard.Commit(usage.(*dto.Usage)); emptyErr != nil {
+		return emptyErr
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)

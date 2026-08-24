@@ -221,6 +221,8 @@ export const channelFormSchema = z
     runtime_automatic_disable_override_enabled: z.boolean().optional(),
     runtime_automatic_disable_status_codes: z.string().optional(),
     runtime_automatic_disable_keywords: z.string().optional(),
+    empty_response_retry_override_enabled: z.boolean().optional(),
+    empty_response_retry_enabled: z.boolean().optional(),
     status: z.number(),
     status_code_mapping: z
       .string()
@@ -436,6 +438,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   runtime_automatic_disable_override_enabled: false,
   runtime_automatic_disable_status_codes: '',
   runtime_automatic_disable_keywords: '',
+  empty_response_retry_override_enabled: false,
+  empty_response_retry_enabled: false,
   status: CHANNEL_STATUS.ENABLED,
   status_code_mapping: '',
   tag: '',
@@ -543,6 +547,8 @@ export function transformChannelToFormDefaults(
   let automaticDisableOverrideEnabled = false
   let automaticDisableStatusCodes = ''
   let automaticDisableKeywords = ''
+  let emptyResponseRetryOverrideEnabled = false
+  let emptyResponseRetryEnabled = false
 
   if (channel.settings) {
     try {
@@ -582,6 +588,9 @@ export function transformChannelToFormDefaults(
         parsed.runtime_automatic_disable_keywords ||
         parsed.automatic_disable_keywords ||
         ''
+      emptyResponseRetryOverrideEnabled =
+        parsed.empty_response_retry_override_enabled === true
+      emptyResponseRetryEnabled = parsed.empty_response_retry_enabled === true
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -636,6 +645,8 @@ export function transformChannelToFormDefaults(
     runtime_automatic_disable_override_enabled: automaticDisableOverrideEnabled,
     runtime_automatic_disable_status_codes: automaticDisableStatusCodes,
     runtime_automatic_disable_keywords: automaticDisableKeywords,
+    empty_response_retry_override_enabled: emptyResponseRetryOverrideEnabled,
+    empty_response_retry_enabled: emptyResponseRetryEnabled,
   }
 }
 
@@ -705,6 +716,15 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
   delete settingsObj.automatic_disable_override_enabled
   delete settingsObj.automatic_disable_status_codes
   delete settingsObj.automatic_disable_keywords
+
+  if (formData.empty_response_retry_override_enabled === true) {
+    settingsObj.empty_response_retry_override_enabled = true
+    settingsObj.empty_response_retry_enabled =
+      formData.empty_response_retry_enabled === true
+  } else {
+    delete settingsObj.empty_response_retry_override_enabled
+    delete settingsObj.empty_response_retry_enabled
+  }
 
   // Add azure_responses_version for Azure channels (type 3)
   if (formData.type === 3 && formData.azure_responses_version) {

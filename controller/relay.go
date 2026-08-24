@@ -348,6 +348,11 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
+	if openaiErr.GetErrorCode() == types.ErrorCodeEmptyResponseRetry {
+		// Nothing reached the client, and retrying is the whole point of the
+		// empty-response switch, so it does not go through the status code rules.
+		return true
+	}
 	code := openaiErr.StatusCode
 	if code >= 200 && code < 300 {
 		return false

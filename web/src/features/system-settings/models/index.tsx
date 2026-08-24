@@ -67,6 +67,7 @@ const defaultModelSettings: ModelSettings = {
   ChannelDisableThreshold: '',
   AutomaticDisableChannelEnabled: false,
   AutomaticEnableChannelEnabled: false,
+  EmptyResponseRetryEnabled: false,
   AutomaticDisableKeywords: '',
   AutomaticDisableStatusCodes: '401',
   RuntimeAutomaticDisableChannelEnabled: false,

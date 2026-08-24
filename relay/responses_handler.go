@@ -137,14 +137,19 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		}
 	}
 
+	emptyGuard := helper.BeginEmptyResponseGuard(c, info)
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
 	if newAPIError != nil {
+		emptyGuard.Release()
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
 
 	usageDto := usage.(*dto.Usage)
+	if emptyErr := emptyGuard.Commit(usageDto); emptyErr != nil {
+		return emptyErr
+	}
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
 		originModelName := info.OriginModelName
 		originPriceData := info.PriceData

@@ -44,12 +44,12 @@ func requestContextDone(c *gin.Context) bool {
 
 func SetEventStreamHeaders(c *gin.Context) {
 	// 检查是否已经设置过头部
-	if _, exists := c.Get("event_stream_headers_set"); exists {
+	if _, exists := c.Get(eventStreamHeadersSetKey); exists {
 		return
 	}
 
 	// 设置标志，表示头部已经设置过
-	c.Set("event_stream_headers_set", true)
+	c.Set(eventStreamHeadersSetKey, true)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -115,6 +115,10 @@ func PingData(c *gin.Context) error {
 	if requestContextDone(c) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
+
+	// A withheld response cannot stay withheld once the client is being kept
+	// alive, so hand it over before the ping goes out.
+	StopEmptyResponseBuffering(c)
 
 	if _, err := c.Writer.Write([]byte(": PING\n\n")); err != nil {
 		return fmt.Errorf("write ping data failed: %w", err)

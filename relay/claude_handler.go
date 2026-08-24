@@ -149,9 +149,14 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			return types.NewError(fmt.Errorf("expected OpenAI chat completions request, got %T", result.Value), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 
+		emptyGuard := helper.BeginEmptyResponseGuard(c, info)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
 		if newApiErr != nil {
+			emptyGuard.Release()
 			return newApiErr
+		}
+		if emptyErr := emptyGuard.Commit(usage); emptyErr != nil {
+			return emptyErr
 		}
 
 		service.PostTextConsumeQuota(c, info, usage, nil)
@@ -218,11 +223,16 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
+	emptyGuard := helper.BeginEmptyResponseGuard(c, info)
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
 	if newAPIError != nil {
+		emptyGuard.Release()
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
+	}
+	if emptyErr := emptyGuard.Commit(usage.(*dto.Usage)); emptyErr != nil {
+		return emptyErr
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)

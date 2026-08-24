@@ -86,6 +86,7 @@ const createRoutingReliabilitySchema = (
       RuntimeAutomaticDisableKeywords: z.string(),
       RuntimeAutomaticDisableStatusCodes: z.string(),
       AutomaticRetryStatusCodes: z.string(),
+      EmptyResponseRetryEnabled: z.boolean(),
       monitor_setting: z.object({
         auto_test_channel_enabled: z.boolean(),
         auto_test_channel_minutes: z.coerce
@@ -162,6 +163,7 @@ type RoutingReliabilitySectionProps = {
     RuntimeAutomaticDisableKeywords: string
     RuntimeAutomaticDisableStatusCodes: string
     AutomaticRetryStatusCodes: string
+    EmptyResponseRetryEnabled: boolean
     'monitor_setting.auto_test_channel_enabled': boolean
     'monitor_setting.auto_test_channel_minutes': number
     'monitor_setting.channel_test_concurrency': number
@@ -184,6 +186,7 @@ type NormalizedRoutingReliabilityValues = {
   RuntimeAutomaticDisableKeywords: string
   RuntimeAutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
+  EmptyResponseRetryEnabled: boolean
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
   'monitor_setting.channel_test_concurrency': number
@@ -216,6 +219,7 @@ const buildFormDefaults = (
   RuntimeAutomaticDisableStatusCodes:
     defaults.RuntimeAutomaticDisableStatusCodes ?? '',
   AutomaticRetryStatusCodes: defaults.AutomaticRetryStatusCodes ?? '',
+  EmptyResponseRetryEnabled: defaults.EmptyResponseRetryEnabled,
   monitor_setting: {
     auto_test_channel_enabled:
       defaults['monitor_setting.auto_test_channel_enabled'],
@@ -253,6 +257,7 @@ const normalizeDefaults = (
   AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
     defaults.AutomaticRetryStatusCodes ?? ''
   ).normalized,
+  EmptyResponseRetryEnabled: defaults.EmptyResponseRetryEnabled,
   'monitor_setting.auto_test_channel_enabled':
     defaults['monitor_setting.auto_test_channel_enabled'],
   'monitor_setting.auto_test_channel_minutes':
@@ -288,6 +293,7 @@ const normalizeFormValues = (
   AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
     values.AutomaticRetryStatusCodes
   ).normalized,
+  EmptyResponseRetryEnabled: values.EmptyResponseRetryEnabled,
   'monitor_setting.auto_test_channel_enabled':
     values.monitor_setting.auto_test_channel_enabled,
   'monitor_setting.auto_test_channel_minutes':
@@ -444,6 +450,29 @@ export function RoutingReliabilitySection({
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='EmptyResponseRetryEnabled'
+                render={({ field }) => (
+                  <SettingsSwitchItem className='xl:col-span-2'>
+                    <SettingsSwitchContent>
+                      <FormLabel>{t('Retry empty responses')}</FormLabel>
+                      <FormDescription>
+                        {t(
+                          'Treat an upstream 200 that carries no content and no output tokens as a failure: the reply is withheld from the client and another channel is tried.'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
                 )}
               />
             </div>

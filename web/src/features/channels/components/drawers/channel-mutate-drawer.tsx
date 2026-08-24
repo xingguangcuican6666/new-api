@@ -1010,7 +1010,8 @@ export function ChannelMutateDrawer({
     (currentAutoBan ?? 1) !== 1 ||
     form.watch('runtime_automatic_disable_override_enabled') ||
     form.watch('runtime_automatic_disable_status_codes')?.trim() ||
-    form.watch('runtime_automatic_disable_keywords')?.trim()
+    form.watch('runtime_automatic_disable_keywords')?.trim() ||
+    form.watch('empty_response_retry_override_enabled')
   )
   const internalNotesConfigured = Boolean(
     currentTag?.trim() || currentRemark?.trim()
@@ -3636,6 +3637,44 @@ export function ChannelMutateDrawer({
                                   )}
                                 />
                               </>
+                            )}
+
+                            <FormField
+                              control={form.control}
+                              name='empty_response_retry_override_enabled'
+                              render={({ field }) => (
+                                <FormItem className='flex items-center justify-between sm:col-span-2'>
+                                  <div className='space-y-0.5'>
+                                    <FormLabel>{t('Empty response retry override')}</FormLabel>
+                                    <FormDescription>
+                                      {t('Decide per channel whether an upstream 200 with no output is retried, instead of following the global switch')}
+                                    </FormDescription>
+                                  </div>
+                                  <FormControl>
+                                    <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+
+                            {form.watch('empty_response_retry_override_enabled') && (
+                              <FormField
+                                control={form.control}
+                                name='empty_response_retry_enabled'
+                                render={({ field }) => (
+                                  <FormItem className='flex items-center justify-between sm:col-span-2'>
+                                    <div className='space-y-0.5'>
+                                      <FormLabel>{t('Retry empty responses')}</FormLabel>
+                                      <FormDescription>
+                                        {t('Treat an upstream 200 that carries no content and no output tokens as a failure: the reply is withheld from the client and another channel is tried.')}
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
                             )}
                           </div>
 

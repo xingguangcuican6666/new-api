@@ -69,6 +69,10 @@ type ChannelOtherSettings struct {
 	RuntimeAutomaticDisableOverrideEnabled bool   `json:"runtime_automatic_disable_override_enabled,omitempty"`
 	RuntimeAutomaticDisableStatusCodes     string `json:"runtime_automatic_disable_status_codes,omitempty"`
 	RuntimeAutomaticDisableKeywords        string `json:"runtime_automatic_disable_keywords,omitempty"`
+	// EmptyResponseRetryOverrideEnabled makes EmptyResponseRetryEnabled below win
+	// over the global switch for this channel.
+	EmptyResponseRetryOverrideEnabled bool `json:"empty_response_retry_override_enabled,omitempty"`
+	EmptyResponseRetryEnabled         bool `json:"empty_response_retry_enabled,omitempty"`
 	// Deprecated names retained so settings saved by the previous implementation remain readable.
 	AutomaticDisableOverrideEnabled       bool                  `json:"automatic_disable_override_enabled,omitempty"`
 	AutomaticDisableStatusCodes           string                `json:"automatic_disable_status_codes,omitempty"`

@@ -74,9 +74,12 @@ const (
 	ErrorCodeBadResponse            ErrorCode = "bad_response"
 	ErrorCodeBadResponseBody        ErrorCode = "bad_response_body"
 	ErrorCodeEmptyResponse          ErrorCode = "empty_response"
-	ErrorCodeAwsInvokeError         ErrorCode = "aws_invoke_error"
-	ErrorCodeModelNotFound          ErrorCode = "model_not_found"
-	ErrorCodePromptBlocked          ErrorCode = "prompt_blocked"
+	// ErrorCodeEmptyResponseRetry marks an upstream 200 that carried no output and
+	// was withheld from the client so another channel can be tried.
+	ErrorCodeEmptyResponseRetry ErrorCode = "empty_response_retry"
+	ErrorCodeAwsInvokeError     ErrorCode = "aws_invoke_error"
+	ErrorCodeModelNotFound      ErrorCode = "model_not_found"
+	ErrorCodePromptBlocked      ErrorCode = "prompt_blocked"
 
 	// sql error
 	ErrorCodeQueryDataError  ErrorCode = "query_data_error"

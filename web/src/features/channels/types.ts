@@ -94,6 +94,8 @@ export interface ChannelOtherSettings {
   runtime_automatic_disable_override_enabled?: boolean
   runtime_automatic_disable_status_codes?: string
   runtime_automatic_disable_keywords?: string
+  empty_response_retry_override_enabled?: boolean
+  empty_response_retry_enabled?: boolean
   automatic_disable_override_enabled?: boolean
   automatic_disable_status_codes?: string
   automatic_disable_keywords?: string
