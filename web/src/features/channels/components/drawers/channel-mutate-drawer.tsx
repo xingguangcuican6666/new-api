@@ -150,6 +150,13 @@ import {
   FIELD_PLACEHOLDERS,
   MODEL_FETCHABLE_TYPES,
   OPENAI_FIELD_PASSTHROUGH_TYPES,
+  RATIO_PROBE_DEFAULT_GROUP,
+  RATIO_PROBE_DEFAULT_PATH,
+  RATIO_PROBE_SOURCE_CUSTOM,
+  RATIO_PROBE_SOURCE_FOLLOW_API,
+  RATIO_PROBE_STATUS_COMPLIANT,
+  RATIO_PROBE_STATUS_ERROR,
+  RATIO_PROBE_STATUS_REJECTED,
 } from '../../constants'
 import { useChannelMutateForm } from '../../hooks/use-channel-mutate-form'
 import {
@@ -264,6 +271,7 @@ const ADVANCED_SETTINGS_SECTION_IDS = {
   extraSettings: 'channel-section-advanced-extra-settings',
   fieldPassthrough: 'channel-section-advanced-field-passthrough',
   upstreamModelDetection: 'channel-section-advanced-upstream-model-detection',
+  ratioProbe: 'channel-section-advanced-ratio-probe',
 } as const
 const ADVANCED_SETTINGS_CHILD_SECTION_IDS: string[] = Object.values(
   ADVANCED_SETTINGS_SECTION_IDS
@@ -271,6 +279,12 @@ const ADVANCED_SETTINGS_CHILD_SECTION_IDS: string[] = Object.values(
 const ADVANCED_CUSTOM_ROUTE_TYPE_PREVIEW_LIMIT = 3
 const UPSTREAM_DETECTED_MODEL_PREVIEW_LIMIT = 8
 const BILLING_QUERY_DEFAULT_OPTION = '__channel_default__'
+// Maps the probe state written by the backend task to i18n source keys.
+const RATIO_PROBE_STATUS_LABELS: Record<string, string> = {
+  [RATIO_PROBE_STATUS_COMPLIANT]: 'Compliant',
+  [RATIO_PROBE_STATUS_REJECTED]: 'Rejected',
+  [RATIO_PROBE_STATUS_ERROR]: 'Probe failed',
+}
 const SENSITIVE_FORM_FIELDS = [
   'type',
   'base_url',
@@ -284,6 +298,7 @@ const SENSITIVE_FORM_FIELDS = [
   'setting',
   'advanced_custom',
   'billing_query',
+  'ratio_probe',
   'is_enterprise_account',
   'vertex_key_type',
   'aws_key_type',
@@ -354,7 +369,8 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.claude_beta_query ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
-    values.upstream_model_update_ignored_models?.trim()
+    values.upstream_model_update_ignored_models?.trim() ||
+    values.ratio_probe?.enabled
   )
 }
 
@@ -764,6 +780,21 @@ export function ChannelMutateDrawer({
       billingQueryAuthDescription = t('The custom Bearer token will be sent.')
     }
   }
+  const currentRatioProbe = form.watch('ratio_probe')
+  const ratioProbeEnabled = currentRatioProbe?.enabled === true
+  const ratioProbeUsesCustomSource =
+    currentRatioProbe?.source === RATIO_PROBE_SOURCE_CUSTOM
+  const ratioProbeBaseURL = ratioProbeUsesCustomSource
+    ? currentRatioProbe?.base_url || ''
+    : currentBaseUrl || ''
+  const normalizedRatioProbeBaseURL = ratioProbeBaseURL
+    .trim()
+    .replace(/\/+$/, '')
+  const ratioProbePath =
+    currentRatioProbe?.path?.trim() || RATIO_PROBE_DEFAULT_PATH
+  const ratioProbeRequestURL = normalizedRatioProbeBaseURL
+    ? `${normalizedRatioProbeBaseURL}${ratioProbePath}`
+    : ''
   const currentPriority = form.watch('priority')
   const currentWeight = form.watch('weight')
   const currentTestModel = form.watch('test_model')
@@ -1094,7 +1125,8 @@ export function ChannelMutateDrawer({
     overrideRulesConfigured ||
     extraSettingsConfigured ||
     fieldPassthroughConfigured ||
-    upstreamModelDetectionConfigured
+    upstreamModelDetectionConfigured ||
+    ratioProbeEnabled
   )
   const advancedNavChildren: ChannelEditorNavChildItem[] = [
     {
@@ -1132,6 +1164,11 @@ export function ChannelMutateDrawer({
       configured: upstreamModelDetectionConfigured,
     })
   }
+  advancedNavChildren.push({
+    id: ADVANCED_SETTINGS_SECTION_IDS.ratioProbe,
+    title: t('Upstream Ratio Probe'),
+    configured: ratioProbeEnabled,
+  })
   const editorNavItems: ChannelEditorNavItem[] = [
     {
       id: CHANNEL_EDITOR_SECTION_IDS.identity,
@@ -1272,6 +1309,40 @@ export function ChannelMutateDrawer({
     return {
       lastCheckTime: settings.upstream_model_update_last_check_time,
       detectedModels: [...new Set(detectedModels)],
+    }
+  }, [currentSettings])
+
+  const ratioProbeMeta = useMemo(() => {
+    const settings = parseSettingsRecord(currentSettings)
+    const probe = settings.ratio_probe
+    if (!probe || typeof probe !== 'object' || Array.isArray(probe)) {
+      return null
+    }
+    const state = probe as Record<string, unknown>
+    if (
+      typeof state.last_probe_time !== 'number' ||
+      state.last_probe_time <= 0
+    ) {
+      return null
+    }
+    return {
+      lastProbeTime: state.last_probe_time,
+      lastStatus:
+        typeof state.last_status === 'string' ? state.last_status : '',
+      lastMessage:
+        typeof state.last_message === 'string' ? state.last_message : '',
+      lastGroupRatio:
+        typeof state.last_group_ratio === 'number'
+          ? state.last_group_ratio
+          : null,
+      lastEnabledKeys:
+        typeof state.last_enabled_keys === 'number'
+          ? state.last_enabled_keys
+          : 0,
+      lastDisabledKeys:
+        typeof state.last_disabled_keys === 'number'
+          ? state.last_disabled_keys
+          : 0,
     }
   }, [currentSettings])
 
@@ -5118,6 +5189,320 @@ export function ChannelMutateDrawer({
                             </fieldset>
                           </div>
                         )}
+                        <div
+                          id={ADVANCED_SETTINGS_SECTION_IDS.ratioProbe}
+                          className={sideDrawerSectionClassName(
+                            configuredAdvancedSectionClassName(
+                              'scroll-mt-4',
+                              ratioProbeEnabled
+                            )
+                          )}
+                        >
+                          <CardHeading
+                            title={t('Upstream Ratio Probe')}
+                            icon={<SlidersHorizontal className='h-4 w-4' />}
+                            iconTone='info'
+                          />
+                          <fieldset
+                            disabled={sensitiveLocked}
+                            className='space-y-4 disabled:opacity-60'
+                          >
+                            <div className='divide-border space-y-0 divide-y border-y'>
+                              <FormField
+                                control={form.control}
+                                name='ratio_probe.enabled'
+                                render={({ field }) => (
+                                  <FormItem className='flex items-center justify-between px-4 py-3'>
+                                    <div className='space-y-0.5'>
+                                      <FormLabel>
+                                        {t('Enable ratio probe')}
+                                      </FormLabel>
+                                      <FormDescription>
+                                        {t(
+                                          'Probe the upstream group ratio every 15 minutes and disable the channel, or the individual key, when it no longer meets the configured bounds.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value === true}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name='ratio_probe.use_api_key'
+                                render={({ field }) => (
+                                  <FormItem className='flex items-center justify-between px-4 py-3'>
+                                    <div className='space-y-0.5'>
+                                      <FormLabel>
+                                        {t('Probe with the channel API key')}
+                                      </FormLabel>
+                                      <FormDescription>
+                                        {field.value === false
+                                          ? t(
+                                              'One shared probe is sent without an Authorization header and applies to every key.'
+                                            )
+                                          : t(
+                                              'Every key of a multi-key channel is probed with its own credential.'
+                                            )}
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value !== false}
+                                        disabled={!ratioProbeEnabled}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <FormField
+                              control={form.control}
+                              name='ratio_probe.source'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>{t('Probe target')}</FormLabel>
+                                  <Select
+                                    items={[
+                                      {
+                                        value: RATIO_PROBE_SOURCE_FOLLOW_API,
+                                        label: t('Follow the API Base URL'),
+                                      },
+                                      {
+                                        value: RATIO_PROBE_SOURCE_CUSTOM,
+                                        label: t('Custom Base URL'),
+                                      },
+                                    ]}
+                                    onValueChange={field.onChange}
+                                    value={
+                                      field.value ||
+                                      RATIO_PROBE_SOURCE_FOLLOW_API
+                                    }
+                                    disabled={!ratioProbeEnabled}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent alignItemWithTrigger={false}>
+                                      <SelectGroup>
+                                        <SelectItem
+                                          value={RATIO_PROBE_SOURCE_FOLLOW_API}
+                                        >
+                                          {t('Follow the API Base URL')}
+                                        </SelectItem>
+                                        <SelectItem
+                                          value={RATIO_PROBE_SOURCE_CUSTOM}
+                                        >
+                                          {t('Custom Base URL')}
+                                        </SelectItem>
+                                      </SelectGroup>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormDescription>
+                                    {t(
+                                      'Follow mode reuses the channel relay Base URL, including the channel type default.'
+                                    )}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            {ratioProbeUsesCustomSource && (
+                              <FormField
+                                control={form.control}
+                                name='ratio_probe.base_url'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Ratio probe Base URL')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder={t(
+                                          'e.g., https://new-api.example.com'
+                                        )}
+                                        disabled={!ratioProbeEnabled}
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        'This URL is independent from the channel relay Base URL.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                            <FormField
+                              control={form.control}
+                              name='ratio_probe.path'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>{t('Ratio probe path')}</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      placeholder={RATIO_PROBE_DEFAULT_PATH}
+                                      disabled={!ratioProbeEnabled}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    {ratioProbeRequestURL ? (
+                                      <span className='block font-mono text-xs'>
+                                        {t('Request')}: GET{' '}
+                                        {ratioProbeRequestURL}
+                                      </span>
+                                    ) : (
+                                      t(
+                                        'Set a Base URL to show the request path.'
+                                      )
+                                    )}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name='ratio_probe.group'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    {t('Upstream group to inspect')}
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      placeholder={RATIO_PROBE_DEFAULT_GROUP}
+                                      disabled={!ratioProbeEnabled}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    {t(
+                                      'Which entry of the upstream group_ratio table is compared. Defaults to default.'
+                                    )}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <div className='grid gap-4 sm:grid-cols-2'>
+                              <FormField
+                                control={form.control}
+                                name='ratio_probe.max_group_ratio'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Max group ratio')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        inputMode='decimal'
+                                        placeholder='1'
+                                        disabled={!ratioProbeEnabled}
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        'Disable when the upstream ratio is higher than this. Leave empty for no upper bound.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name='ratio_probe.min_group_ratio'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Min group ratio')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        inputMode='decimal'
+                                        placeholder={t('Optional')}
+                                        disabled={!ratioProbeEnabled}
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        'Disable when the upstream ratio is lower than this, which usually means the upstream changed its pricing model.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            {ratioProbeMeta && (
+                              <div className='text-muted-foreground space-y-2 border-t pt-3 text-xs'>
+                                <div>
+                                  <span className='text-foreground font-medium'>
+                                    {t('Last probe time')}:
+                                  </span>{' '}
+                                  {formatUnixTime(ratioProbeMeta.lastProbeTime)}
+                                </div>
+                                <div className='flex flex-wrap items-center gap-2'>
+                                  <span className='text-foreground font-medium'>
+                                    {t('Last probe result')}:
+                                  </span>
+                                  <Badge
+                                    variant={
+                                      ratioProbeMeta.lastStatus ===
+                                      RATIO_PROBE_STATUS_COMPLIANT
+                                        ? 'secondary'
+                                        : 'destructive'
+                                    }
+                                  >
+                                    {t(
+                                      RATIO_PROBE_STATUS_LABELS[
+                                        ratioProbeMeta.lastStatus
+                                      ] || ratioProbeMeta.lastStatus
+                                    )}
+                                  </Badge>
+                                  {ratioProbeMeta.lastGroupRatio !== null && (
+                                    <Badge variant='outline'>
+                                      {t('Group ratio')}:{' '}
+                                      {ratioProbeMeta.lastGroupRatio}
+                                    </Badge>
+                                  )}
+                                  {ratioProbeMeta.lastDisabledKeys > 0 && (
+                                    <Badge variant='outline'>
+                                      {t('Disabled keys')}:{' '}
+                                      {ratioProbeMeta.lastDisabledKeys}
+                                    </Badge>
+                                  )}
+                                  {ratioProbeMeta.lastEnabledKeys > 0 && (
+                                    <Badge variant='outline'>
+                                      {t('Restored keys')}:{' '}
+                                      {ratioProbeMeta.lastEnabledKeys}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {ratioProbeMeta.lastMessage && (
+                                  <div className='break-all'>
+                                    {ratioProbeMeta.lastMessage}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </fieldset>
+                        </div>
                       </ChannelAdvancedSection>
                     </div>
                   </div>

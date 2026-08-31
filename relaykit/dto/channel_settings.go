@@ -2,6 +2,7 @@ package dto
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
@@ -120,6 +121,192 @@ func (c *BillingQueryConfig) UsesAPIKey() bool {
 	return c == nil || c.UseAPIKey == nil || *c.UseAPIKey
 }
 
+const (
+	// RatioProbeSourceFollowAPI probes the channel relay Base URL (falling back to
+	// the channel type default when the channel has no explicit Base URL).
+	RatioProbeSourceFollowAPI = "follow_api"
+	// RatioProbeSourceCustom probes an independent Base URL.
+	RatioProbeSourceCustom = "custom"
+	// RatioProbeDefaultPath is the New API group ratio endpoint.
+	RatioProbeDefaultPath  = "/api/ratio_config"
+	RatioProbeDefaultGroup = "default"
+
+	RatioProbeStatusCompliant = "compliant"
+	RatioProbeStatusRejected  = "rejected"
+	RatioProbeStatusError     = "error"
+
+	// MaxRatioProbeRatio bounds configured thresholds so a typo cannot turn into
+	// an effectively unbounded comparison.
+	MaxRatioProbeRatio = 1e6
+	// ratioProbeEpsilon absorbs float round-trips through JSON so a threshold of
+	// 1 still accepts an upstream ratio serialized as 0.9999999999999999.
+	ratioProbeEpsilon = 1e-9
+)
+
+// RatioProbeConfig describes the periodic upstream group ratio probe. When the
+// probe is enabled the scheduled task compares the upstream group ratio against
+// the configured bounds and enables/disables the channel (or, for multi-key
+// channels, the individual key) accordingly.
+//
+// A nil UseAPIKey means "send the channel API key as the Bearer token", which is
+// the behaviour multi-key channels need: each key is probed with its own
+// credential so keys can be judged independently.
+type RatioProbeConfig struct {
+	Enabled       bool     `json:"enabled,omitempty"`
+	Source        string   `json:"source,omitempty"`
+	BaseURL       string   `json:"base_url,omitempty"`
+	Path          string   `json:"path,omitempty"`
+	Group         string   `json:"group,omitempty"`
+	MaxGroupRatio *float64 `json:"max_group_ratio,omitempty"`
+	MinGroupRatio *float64 `json:"min_group_ratio,omitempty"`
+	UseAPIKey     *bool    `json:"use_api_key,omitempty"`
+
+	// Probe state written by the scheduled task and rendered read-only in the
+	// channel editor.
+	LastProbeTime    int64    `json:"last_probe_time,omitempty"`
+	LastGroupRatio   *float64 `json:"last_group_ratio,omitempty"`
+	LastStatus       string   `json:"last_status,omitempty"`
+	LastMessage      string   `json:"last_message,omitempty"`
+	LastEnabledKeys  int      `json:"last_enabled_keys,omitempty"`
+	LastDisabledKeys int      `json:"last_disabled_keys,omitempty"`
+}
+
+func (c *RatioProbeConfig) IsEnabled() bool {
+	return c != nil && c.Enabled
+}
+
+func (c *RatioProbeConfig) NormalizedSource() string {
+	if c == nil {
+		return RatioProbeSourceFollowAPI
+	}
+	source := strings.ToLower(strings.TrimSpace(c.Source))
+	if source == RatioProbeSourceCustom {
+		return RatioProbeSourceCustom
+	}
+	return RatioProbeSourceFollowAPI
+}
+
+func (c *RatioProbeConfig) NormalizedBaseURL() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
+}
+
+func (c *RatioProbeConfig) NormalizedPath() string {
+	if c == nil {
+		return RatioProbeDefaultPath
+	}
+	path := strings.TrimSpace(c.Path)
+	if path == "" {
+		return RatioProbeDefaultPath
+	}
+	return path
+}
+
+func (c *RatioProbeConfig) NormalizedGroup() string {
+	if c == nil {
+		return RatioProbeDefaultGroup
+	}
+	group := strings.TrimSpace(c.Group)
+	if group == "" {
+		return RatioProbeDefaultGroup
+	}
+	return group
+}
+
+func (c *RatioProbeConfig) UsesAPIKey() bool {
+	return c == nil || c.UseAPIKey == nil || *c.UseAPIKey
+}
+
+// Accepts reports whether an upstream group ratio satisfies the configured
+// bounds. Both bounds are inclusive.
+func (c *RatioProbeConfig) Accepts(ratio float64) bool {
+	if c == nil {
+		return true
+	}
+	if math.IsNaN(ratio) || math.IsInf(ratio, 0) {
+		return false
+	}
+	if c.MaxGroupRatio != nil && ratio > *c.MaxGroupRatio+ratioProbeEpsilon {
+		return false
+	}
+	if c.MinGroupRatio != nil && ratio < *c.MinGroupRatio-ratioProbeEpsilon {
+		return false
+	}
+	return true
+}
+
+func (c *RatioProbeConfig) Validate() error {
+	if !c.IsEnabled() {
+		return nil
+	}
+
+	source := strings.ToLower(strings.TrimSpace(c.Source))
+	switch source {
+	case "", RatioProbeSourceFollowAPI:
+	case RatioProbeSourceCustom:
+		if err := ValidateRatioProbeBaseURL(c.NormalizedBaseURL()); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("invalid ratio probe source: %s", c.Source)
+	}
+
+	path := c.NormalizedPath()
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		return fmt.Errorf("ratio probe path must be an absolute path starting with /")
+	}
+	if strings.ContainsAny(path, "?#") {
+		return fmt.Errorf("ratio probe path must not contain query parameters or fragments")
+	}
+
+	if c.MaxGroupRatio == nil && c.MinGroupRatio == nil {
+		return fmt.Errorf("ratio probe requires a max or min group ratio")
+	}
+	if err := validateRatioProbeBound("max", c.MaxGroupRatio); err != nil {
+		return err
+	}
+	if err := validateRatioProbeBound("min", c.MinGroupRatio); err != nil {
+		return err
+	}
+	if c.MaxGroupRatio != nil && c.MinGroupRatio != nil && *c.MinGroupRatio > *c.MaxGroupRatio {
+		return fmt.Errorf("ratio probe min group ratio must not exceed max group ratio")
+	}
+	return nil
+}
+
+// ValidateRatioProbeBaseURL rejects probe targets that cannot be used as an
+// absolute upstream endpoint. It is shared by save-time validation and by the
+// scheduled probe, which also accepts the channel relay Base URL.
+func ValidateRatioProbeBaseURL(baseURL string) error {
+	parsedURL, err := url.ParseRequestURI(baseURL)
+	if err != nil || parsedURL.Hostname() == "" {
+		return fmt.Errorf("ratio probe base URL must be an absolute HTTP or HTTPS URL")
+	}
+	if scheme := strings.ToLower(parsedURL.Scheme); scheme != "http" && scheme != "https" {
+		return fmt.Errorf("ratio probe base URL must use HTTP or HTTPS")
+	}
+	if parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.ForceQuery || parsedURL.Fragment != "" ||
+		strings.ContainsAny(baseURL, "?#") {
+		return fmt.Errorf("ratio probe base URL must not contain credentials, query parameters, or fragments")
+	}
+	return nil
+}
+
+func validateRatioProbeBound(name string, bound *float64) error {
+	if bound == nil {
+		return nil
+	}
+	if math.IsNaN(*bound) || math.IsInf(*bound, 0) {
+		return fmt.Errorf("ratio probe %s group ratio must be a finite number", name)
+	}
+	if *bound < 0 || *bound > MaxRatioProbeRatio {
+		return fmt.Errorf("ratio probe %s group ratio must be between 0 and %g", name, MaxRatioProbeRatio)
+	}
+	return nil
+}
+
 type ChannelOtherSettings struct {
 	RuntimeAutomaticDisableOverrideEnabled bool   `json:"runtime_automatic_disable_override_enabled,omitempty"`
 	RuntimeAutomaticDisableStatusCodes     string `json:"runtime_automatic_disable_status_codes,omitempty"`
@@ -155,6 +342,7 @@ type ChannelOtherSettings struct {
 	UpstreamModelUpdateIgnoredModels      []string              `json:"upstream_model_update_ignored_models,omitempty"`       // 手动忽略的模型
 	AdvancedCustom                        *AdvancedCustomConfig `json:"advanced_custom,omitempty"`
 	BillingQuery                          *BillingQueryConfig   `json:"billing_query,omitempty"`
+	RatioProbe                            *RatioProbeConfig     `json:"ratio_probe,omitempty"`
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

@@ -20,6 +20,7 @@ import (
 func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(channelTestHandler{})
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
+	service.RegisterSystemTaskHandler(ratioProbeHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 }
@@ -108,6 +109,35 @@ func (modelUpdateHandler) Run(ctx context.Context, task *model.SystemTask, runne
 		return
 	}
 	summary := runChannelUpstreamModelUpdateTaskOnce(ctx, payload.Manual, !payload.Manual, service.NewSystemTaskProgressReporter(task, runnerID))
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+// ratioProbeHandler runs the scheduled upstream group ratio probe. Per-channel
+// enablement lives in the channel's own settings; this switch only controls
+// whether the scheduler runs the sweep at all.
+type ratioProbeHandler struct{}
+
+func (ratioProbeHandler) Type() string { return model.SystemTaskTypeRatioProbe }
+
+func (ratioProbeHandler) Enabled() bool {
+	return common.GetEnvOrDefaultBool("CHANNEL_RATIO_PROBE_TASK_ENABLED", true)
+}
+
+func (ratioProbeHandler) Interval() time.Duration {
+	intervalMinutes := common.GetEnvOrDefault(
+		"CHANNEL_RATIO_PROBE_TASK_INTERVAL_MINUTES",
+		channelRatioProbeTaskDefaultIntervalMinutes,
+	)
+	if intervalMinutes < 1 {
+		intervalMinutes = channelRatioProbeTaskDefaultIntervalMinutes
+	}
+	return time.Duration(intervalMinutes) * time.Minute
+}
+
+func (ratioProbeHandler) NewPayload() any { return nil }
+
+func (ratioProbeHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	summary := runChannelRatioProbeTaskOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
 	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
 }
 

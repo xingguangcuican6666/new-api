@@ -25,6 +25,17 @@ export const CHANNEL_TYPE_NEW_API = 60
 export const BILLING_QUERY_TYPE_NEW_API = 'new_api'
 export const BILLING_QUERY_NEW_API_PATH = '/api/user/self'
 
+// Upstream group ratio probe (see relaykit/dto.RatioProbeConfig). The switch is
+// available for every channel type, so these are not gated on CHANNEL_TYPES.
+export const RATIO_PROBE_SOURCE_FOLLOW_API = 'follow_api'
+export const RATIO_PROBE_SOURCE_CUSTOM = 'custom'
+export const RATIO_PROBE_DEFAULT_PATH = '/api/ratio_config'
+export const RATIO_PROBE_DEFAULT_GROUP = 'default'
+export const RATIO_PROBE_MAX_RATIO = 1e6
+export const RATIO_PROBE_STATUS_COMPLIANT = 'compliant'
+export const RATIO_PROBE_STATUS_REJECTED = 'rejected'
+export const RATIO_PROBE_STATUS_ERROR = 'error'
+
 export const CHANNEL_TYPES = {
   0: 'Unknown',
   1: 'OpenAI',

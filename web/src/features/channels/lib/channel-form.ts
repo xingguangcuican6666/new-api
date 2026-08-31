@@ -30,6 +30,10 @@ import {
   FIELD_PASSTHROUGH_TYPES,
   MODEL_FETCHABLE_TYPES,
   OPENAI_FIELD_PASSTHROUGH_TYPES,
+  RATIO_PROBE_DEFAULT_PATH,
+  RATIO_PROBE_MAX_RATIO,
+  RATIO_PROBE_SOURCE_CUSTOM,
+  RATIO_PROBE_SOURCE_FOLLOW_API,
 } from '../constants'
 import type { Channel } from '../types'
 import {
@@ -188,7 +192,10 @@ function isVertexJsonKey(value: string | undefined): boolean {
   }
 }
 
-function isValidBillingQueryBaseURL(value: string | undefined): boolean {
+// Shared by the balance query and the upstream ratio probe: both post to an
+// independent New API instance and both reject embedded credentials so a saved
+// channel setting cannot smuggle secrets into a URL.
+function isValidUpstreamBaseURL(value: string | undefined): boolean {
   const trimmedValue = value?.trim() || ''
   if (!trimmedValue) return false
 
@@ -217,6 +224,46 @@ const billingQuerySchema = z.object({
   use_api_key: z.boolean().optional(),
 })
 
+const ratioProbeSchema = z.object({
+  enabled: z.boolean().optional(),
+  source: z
+    .enum([RATIO_PROBE_SOURCE_FOLLOW_API, RATIO_PROBE_SOURCE_CUSTOM])
+    .optional(),
+  base_url: z.string().optional(),
+  path: z.string().optional(),
+  group: z.string().optional(),
+  // The bounds stay strings so an empty field means "no bound" instead of 0.
+  max_group_ratio: z.string().optional(),
+  min_group_ratio: z.string().optional(),
+  use_api_key: z.boolean().optional(),
+})
+
+export type RatioProbeBound = number | undefined
+
+/**
+ * Parse one ratio bound. Returns undefined for an empty field (no bound) and
+ * null when the text is not a usable ratio.
+ */
+export function parseRatioProbeBound(
+  value: string | undefined
+): RatioProbeBound | null {
+  const trimmedValue = String(value ?? '').trim()
+  if (!trimmedValue) return undefined
+  const parsedValue = Number(trimmedValue)
+  if (!Number.isFinite(parsedValue)) return null
+  if (parsedValue < 0 || parsedValue > RATIO_PROBE_MAX_RATIO) return null
+  return parsedValue
+}
+
+function isValidRatioProbePath(value: string | undefined): boolean {
+  const trimmedValue = String(value ?? '').trim()
+  if (!trimmedValue) return true
+  if (!trimmedValue.startsWith('/') || trimmedValue.startsWith('//')) {
+    return false
+  }
+  return !trimmedValue.includes('?') && !trimmedValue.includes('#')
+}
+
 function addRequiredIssue(
   ctx: z.RefinementCtx,
   path: string,
@@ -227,6 +274,74 @@ function addRequiredIssue(
     path: [path],
     message,
   })
+}
+
+function addRatioProbeIssue(
+  ctx: z.RefinementCtx,
+  field: string,
+  message: string
+): void {
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ['ratio_probe', field],
+    message,
+  })
+}
+
+/**
+ * Mirrors the backend contract in relaykit/dto.RatioProbeConfig.Validate so an
+ * unusable probe is rejected before it reaches the scheduled task.
+ */
+function validateRatioProbeForm(
+  probe: z.infer<typeof ratioProbeSchema>,
+  ctx: z.RefinementCtx
+): void {
+  if (probe.source === RATIO_PROBE_SOURCE_CUSTOM) {
+    if (!probe.base_url?.trim()) {
+      addRatioProbeIssue(ctx, 'base_url', 'Ratio probe Base URL is required')
+    } else if (!isValidUpstreamBaseURL(probe.base_url)) {
+      addRatioProbeIssue(
+        ctx,
+        'base_url',
+        'Ratio probe Base URL must be an absolute HTTP or HTTPS URL without credentials, query parameters, or fragments'
+      )
+    }
+  }
+
+  if (!isValidRatioProbePath(probe.path)) {
+    addRatioProbeIssue(
+      ctx,
+      'path',
+      'Ratio probe path must be an absolute path without query parameters or fragments'
+    )
+  }
+
+  const maxRatio = parseRatioProbeBound(probe.max_group_ratio)
+  const minRatio = parseRatioProbeBound(probe.min_group_ratio)
+  if (maxRatio === null) {
+    addRatioProbeIssue(ctx, 'max_group_ratio', 'Ratio bound is out of range')
+  }
+  if (minRatio === null) {
+    addRatioProbeIssue(ctx, 'min_group_ratio', 'Ratio bound is out of range')
+  }
+  if (maxRatio === undefined && minRatio === undefined) {
+    addRatioProbeIssue(
+      ctx,
+      'max_group_ratio',
+      'Set a max or min group ratio to judge the upstream'
+    )
+  }
+  if (
+    typeof maxRatio === 'number' &&
+    typeof minRatio === 'number' &&
+    minRatio > maxRatio
+  ) {
+    addRatioProbeIssue(
+      ctx,
+      'min_group_ratio',
+      'Min group ratio must not exceed max group ratio'
+    )
+  }
 }
 
 export const channelFormSchema = z
@@ -286,6 +401,7 @@ export const channelFormSchema = z
       .refine(isOptionalJsonObject, ERROR_MESSAGES.INVALID_JSON),
     advanced_custom: z.string().optional(),
     billing_query: billingQuerySchema.optional(),
+    ratio_probe: ratioProbeSchema.optional(),
     other: z.string().optional(),
     // Multi-key options (not sent to backend directly)
     multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
@@ -332,7 +448,7 @@ export const channelFormSchema = z
           path: ['billing_query', 'base_url'],
           message: 'Balance query Base URL is required',
         })
-      } else if (!isValidBillingQueryBaseURL(billingQuery.base_url)) {
+      } else if (!isValidUpstreamBaseURL(billingQuery.base_url)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['billing_query', 'base_url'],
@@ -340,6 +456,10 @@ export const channelFormSchema = z
             'Balance query Base URL must be an absolute HTTP or HTTPS URL without credentials, query parameters, or fragments',
         })
       }
+    }
+
+    if (data.ratio_probe?.enabled) {
+      validateRatioProbeForm(data.ratio_probe, ctx)
     }
 
     if (data.runtime_automatic_disable_override_enabled) {
@@ -539,6 +659,66 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
     user_id: '',
     use_api_key: true,
   },
+  ratio_probe: {
+    enabled: false,
+    source: RATIO_PROBE_SOURCE_FOLLOW_API,
+    base_url: '',
+    path: '',
+    group: '',
+    max_group_ratio: '',
+    min_group_ratio: '',
+    use_api_key: true,
+  },
+}
+
+type RatioProbeFormValues = {
+  enabled: boolean
+  source:
+    | typeof RATIO_PROBE_SOURCE_FOLLOW_API
+    | typeof RATIO_PROBE_SOURCE_CUSTOM
+  base_url: string
+  path: string
+  group: string
+  max_group_ratio: string
+  min_group_ratio: string
+  use_api_key: boolean
+}
+
+const DEFAULT_RATIO_PROBE_FORM_VALUES: RatioProbeFormValues = {
+  enabled: false,
+  source: RATIO_PROBE_SOURCE_FOLLOW_API,
+  base_url: '',
+  path: '',
+  group: '',
+  max_group_ratio: '',
+  min_group_ratio: '',
+  use_api_key: true,
+}
+
+function ratioProbeBoundToInput(value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? String(value)
+    : ''
+}
+
+function normalizeRatioProbeFormValues(value: unknown): RatioProbeFormValues {
+  if (!isJsonObjectValue(value)) {
+    return { ...DEFAULT_RATIO_PROBE_FORM_VALUES }
+  }
+
+  return {
+    enabled: value.enabled === true,
+    source:
+      value.source === RATIO_PROBE_SOURCE_CUSTOM
+        ? RATIO_PROBE_SOURCE_CUSTOM
+        : RATIO_PROBE_SOURCE_FOLLOW_API,
+    base_url: typeof value.base_url === 'string' ? value.base_url : '',
+    path: typeof value.path === 'string' ? value.path : '',
+    group: typeof value.group === 'string' ? value.group : '',
+    max_group_ratio: ratioProbeBoundToInput(value.max_group_ratio),
+    min_group_ratio: ratioProbeBoundToInput(value.min_group_ratio),
+    use_api_key: value.use_api_key !== false,
+  }
 }
 
 type BillingQueryFormValues = {
@@ -646,6 +826,7 @@ export function transformChannelToFormDefaults(
   let emptyResponseRetryEnabled = false
   let emptyResponseRetryInPlace = true
   let billingQuery = { ...DEFAULT_BILLING_QUERY_FORM_VALUES }
+  let ratioProbe = { ...DEFAULT_RATIO_PROBE_FORM_VALUES }
 
   if (channel.settings) {
     try {
@@ -675,6 +856,7 @@ export function transformChannelToFormDefaults(
         advancedCustom = stringifyAdvancedCustomConfig(parsed.advanced_custom)
       }
       billingQuery = normalizeBillingQueryFormValues(parsed.billing_query)
+      ratioProbe = normalizeRatioProbeFormValues(parsed.ratio_probe)
       automaticDisableOverrideEnabled =
         parsed.runtime_automatic_disable_override_enabled === true ||
         parsed.automatic_disable_override_enabled === true
@@ -742,6 +924,7 @@ export function transformChannelToFormDefaults(
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
     billing_query: billingQuery,
+    ratio_probe: ratioProbe,
     runtime_automatic_disable_override_enabled: automaticDisableOverrideEnabled,
     runtime_automatic_disable_status_codes: automaticDisableStatusCodes,
     runtime_automatic_disable_keywords: automaticDisableKeywords,
@@ -953,7 +1136,61 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     delete settingsObj.billing_query
   }
 
+  applyRatioProbeSettings(settingsObj, formData)
+
   return JSON.stringify(settingsObj)
+}
+
+/**
+ * Write the ratio probe config while preserving the probe state the backend
+ * task owns (last probe time, last observed ratio, last message), so saving the
+ * channel never erases the diagnostics shown in the editor.
+ */
+function applyRatioProbeSettings(
+  settingsObj: Record<string, unknown>,
+  formData: ChannelFormValues
+): void {
+  const probe = formData.ratio_probe
+  if (!probe?.enabled) {
+    if ('ratio_probe' in settingsObj) {
+      delete settingsObj.ratio_probe
+    }
+    return
+  }
+
+  const previous = isJsonObjectValue(settingsObj.ratio_probe)
+    ? settingsObj.ratio_probe
+    : {}
+  const nextProbe: Record<string, unknown> = {
+    ...previous,
+    enabled: true,
+    source:
+      probe.source === RATIO_PROBE_SOURCE_CUSTOM
+        ? RATIO_PROBE_SOURCE_CUSTOM
+        : RATIO_PROBE_SOURCE_FOLLOW_API,
+    base_url:
+      probe.source === RATIO_PROBE_SOURCE_CUSTOM
+        ? normalizeBaseUrl(probe.base_url)
+        : '',
+    path: probe.path?.trim() || RATIO_PROBE_DEFAULT_PATH,
+    group: probe.group?.trim() || '',
+    use_api_key: probe.use_api_key !== false,
+  }
+
+  const maxRatio = parseRatioProbeBound(probe.max_group_ratio)
+  const minRatio = parseRatioProbeBound(probe.min_group_ratio)
+  if (typeof maxRatio === 'number') {
+    nextProbe.max_group_ratio = maxRatio
+  } else {
+    delete nextProbe.max_group_ratio
+  }
+  if (typeof minRatio === 'number') {
+    nextProbe.min_group_ratio = minRatio
+  } else {
+    delete nextProbe.min_group_ratio
+  }
+
+  settingsObj.ratio_probe = nextProbe
 }
 
 export function normalizeBillingQueryBaseURL(

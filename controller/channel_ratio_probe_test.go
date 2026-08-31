@@ -1,0 +1,364 @@
+package controller
+
+import (
+	"testing"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func ratioProbeFloat(value float64) *float64 {
+	return &value
+}
+
+func TestParseUpstreamGroupRatios(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		want    map[string]float64
+		wantErr string
+	}{
+		{
+			name: "management envelope",
+			body: `{"success":true,"message":"","data":{"model_ratio":{"gpt-4":15},"group_ratio":{"default":1,"vip":0.8}}}`,
+			want: map[string]float64{"default": 1, "vip": 0.8},
+		},
+		{
+			name: "bare document",
+			body: `{"group_ratio":{"default":2}}`,
+			want: map[string]float64{"default": 2},
+		},
+		{
+			name: "non numeric and negative entries are dropped",
+			body: `{"group_ratio":{"default":1,"broken":"1.0","negative":-1}}`,
+			want: map[string]float64{"default": 1},
+		},
+		{
+			name:    "upstream failure",
+			body:    `{"success":false,"message":"倍率配置接口未启用"}`,
+			wantErr: "倍率配置接口未启用",
+		},
+		{
+			name:    "upstream failure without message",
+			body:    `{"success":false}`,
+			wantErr: "upstream reported failure",
+		},
+		{
+			name:    "group ratio missing",
+			body:    `{"success":true,"data":{"model_ratio":{"gpt-4":15}}}`,
+			wantErr: "does not expose group_ratio",
+		},
+		{
+			name:    "group ratio has no usable entry",
+			body:    `{"success":true,"data":{"group_ratio":{"default":"free"}}}`,
+			wantErr: "no usable entries",
+		},
+		{
+			name:    "invalid JSON",
+			body:    `not json`,
+			wantErr: "invalid ratio config response",
+		},
+		{
+			name:    "pricing list payload",
+			body:    `{"success":true,"data":[{"model_name":"gpt-4"}]}`,
+			wantErr: "does not expose group_ratio",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ratios, err := parseUpstreamGroupRatios([]byte(tt.body))
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, ratios)
+		})
+	}
+}
+
+func TestBuildChannelRatioProbeURL(t *testing.T) {
+	customBaseURL := "https://relay.example"
+	tests := []struct {
+		name    string
+		channel *model.Channel
+		config  *dto.RatioProbeConfig
+		want    string
+		wantErr string
+	}{
+		{
+			name:    "follow api uses the channel base URL",
+			channel: &model.Channel{BaseURL: &customBaseURL},
+			config:  &dto.RatioProbeConfig{Enabled: true, MaxGroupRatio: ratioProbeFloat(1)},
+			want:    "https://relay.example/api/ratio_config",
+		},
+		{
+			name:    "custom source ignores the channel base URL",
+			channel: &model.Channel{BaseURL: &customBaseURL},
+			config: &dto.RatioProbeConfig{
+				Enabled: true,
+				Source:  dto.RatioProbeSourceCustom,
+				BaseURL: "https://probe.example/",
+				Path:    "/api/pricing",
+			},
+			want: "https://probe.example/api/pricing",
+		},
+		{
+			name:    "follow api without a base URL",
+			channel: &model.Channel{},
+			config:  &dto.RatioProbeConfig{Enabled: true},
+			wantErr: "base URL is empty",
+		},
+		{
+			name:    "follow api with an unusable base URL",
+			channel: &model.Channel{BaseURL: ratioProbeStringPointer("relay.example")},
+			config:  &dto.RatioProbeConfig{Enabled: true},
+			wantErr: "absolute HTTP or HTTPS URL",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requestURL, err := buildChannelRatioProbeURL(tt.channel, tt.config)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, requestURL)
+		})
+	}
+}
+
+func ratioProbeStringPointer(value string) *string {
+	return &value
+}
+
+func TestApplySingleKeyRatioProbeDecision(t *testing.T) {
+	probeDisabled := &model.Channel{Status: common.ChannelStatusAutoDisabled, Key: "sk-a"}
+	setChannelRatioProbeStatusReason(probeDisabled, "group default ratio 2 exceeds max 1")
+
+	relayDisabled := &model.Channel{Status: common.ChannelStatusAutoDisabled, Key: "sk-a"}
+	relayDisabled.SetOtherInfo(map[string]interface{}{"status_reason": "invalid api key"})
+
+	tests := []struct {
+		name       string
+		channel    *model.Channel
+		decision   ratioProbeDecision
+		wantStatus int
+		wantChange bool
+	}{
+		{
+			name:       "non compliant disables an enabled channel",
+			channel:    &model.Channel{Status: common.ChannelStatusEnabled, Key: "sk-a"},
+			decision:   ratioProbeDecision{key: "sk-a", message: "group default ratio 2 exceeds max 1"},
+			wantStatus: common.ChannelStatusAutoDisabled,
+			wantChange: true,
+		},
+		{
+			name:       "compliant restores a probe disabled channel",
+			channel:    probeDisabled,
+			decision:   ratioProbeDecision{key: "sk-a", compliant: true, ratio: 1},
+			wantStatus: common.ChannelStatusEnabled,
+			wantChange: true,
+		},
+		{
+			name:       "compliant leaves a relay disabled channel alone",
+			channel:    relayDisabled,
+			decision:   ratioProbeDecision{key: "sk-a", compliant: true, ratio: 1},
+			wantStatus: common.ChannelStatusAutoDisabled,
+		},
+		{
+			name:       "probe failure changes nothing",
+			channel:    &model.Channel{Status: common.ChannelStatusEnabled, Key: "sk-a"},
+			decision:   ratioProbeDecision{key: "sk-a", failed: true, message: "status code: 502"},
+			wantStatus: common.ChannelStatusEnabled,
+		},
+		{
+			name:       "a rotated key leaves the channel untouched",
+			channel:    &model.Channel{Status: common.ChannelStatusEnabled, Key: "sk-new"},
+			decision:   ratioProbeDecision{key: "sk-a", message: "group default ratio 2 exceeds max 1"},
+			wantStatus: common.ChannelStatusEnabled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := channelRatioProbeResult{}
+			byKey := map[string]ratioProbeDecision{tt.decision.key: tt.decision}
+			applySingleKeyRatioProbeDecision(tt.channel, byKey, &result)
+			assert.Equal(t, tt.wantStatus, tt.channel.Status)
+			assert.Equal(t, tt.wantChange, result.statusChanged)
+		})
+	}
+}
+
+func TestSummarizeRatioProbeDecisions(t *testing.T) {
+	tests := []struct {
+		name        string
+		decisions   []ratioProbeDecision
+		wantStatus  string
+		wantMessage string
+		wantRatio   *float64
+	}{
+		{
+			name:       "all compliant reports the highest ratio",
+			decisions:  []ratioProbeDecision{{key: "a", compliant: true, ratio: 0.5}, {key: "b", compliant: true, ratio: 0.9}},
+			wantStatus: dto.RatioProbeStatusCompliant,
+			wantRatio:  ratioProbeFloat(0.9),
+		},
+		{
+			name: "one rejection wins over compliant keys",
+			decisions: []ratioProbeDecision{
+				{key: "a", compliant: true, ratio: 0.5},
+				{key: "b", ratio: 2, message: "group default ratio 2 exceeds max 1"},
+			},
+			wantStatus:  dto.RatioProbeStatusRejected,
+			wantMessage: "group default ratio 2 exceeds max 1",
+			wantRatio:   ratioProbeFloat(2),
+		},
+		{
+			name: "errors are reported only when nothing succeeded",
+			decisions: []ratioProbeDecision{
+				{key: "a", failed: true, message: "status code: 502"},
+				{key: "b", compliant: true, ratio: 1},
+			},
+			wantStatus: dto.RatioProbeStatusCompliant,
+			wantRatio:  ratioProbeFloat(1),
+		},
+		{
+			name:        "all failed",
+			decisions:   []ratioProbeDecision{{key: "a", failed: true, message: "status code: 502"}},
+			wantStatus:  dto.RatioProbeStatusError,
+			wantMessage: "status code: 502",
+		},
+		{
+			name:        "no decisions",
+			wantStatus:  dto.RatioProbeStatusError,
+			wantMessage: "probe produced no result",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, message, ratio := summarizeRatioProbeDecisions(tt.decisions)
+			assert.Equal(t, tt.wantStatus, status)
+			assert.Equal(t, tt.wantMessage, message)
+			if tt.wantRatio == nil {
+				assert.Nil(t, ratio)
+				return
+			}
+			require.NotNil(t, ratio)
+			assert.InDelta(t, *tt.wantRatio, *ratio, 1e-9)
+		})
+	}
+}
+
+func TestApplyMultiKeyRatioProbeDecisions(t *testing.T) {
+	channel := &model.Channel{
+		Status: common.ChannelStatusEnabled,
+		Key:    "sk-a\nsk-b\nsk-c",
+		ChannelInfo: model.ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeySize: 3,
+			MultiKeyStatusList: map[int]int{
+				2: common.ChannelStatusManuallyDisabled,
+			},
+		},
+	}
+
+	result := channelRatioProbeResult{}
+	applyMultiKeyRatioProbeDecisions(channel, map[string]ratioProbeDecision{
+		"sk-a": {key: "sk-a", compliant: true, ratio: 1},
+		"sk-b": {key: "sk-b", ratio: 3, message: "group default ratio 3 exceeds max 1"},
+		"sk-c": {key: "sk-c", compliant: true, ratio: 1},
+	}, &result)
+
+	assert.Equal(t, 1, result.disabledKeys)
+	assert.Equal(t, 0, result.enabledKeys)
+	assert.False(t, result.statusChanged)
+	assert.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	assert.Equal(t, map[int]int{
+		1: common.ChannelStatusAutoDisabled,
+		2: common.ChannelStatusManuallyDisabled,
+	}, channel.ChannelInfo.MultiKeyStatusList, "a manually disabled key stays manually disabled")
+	assert.Contains(t, channel.ChannelInfo.MultiKeyDisabledReason[1], "exceeds max 1")
+	assert.NotZero(t, channel.ChannelInfo.MultiKeyDisabledTime[1])
+
+	// The compliant key turns non-compliant too, which leaves no usable key and
+	// must take the channel down.
+	result = channelRatioProbeResult{}
+	applyMultiKeyRatioProbeDecisions(channel, map[string]ratioProbeDecision{
+		"sk-a": {key: "sk-a", ratio: 3, message: "group default ratio 3 exceeds max 1"},
+	}, &result)
+
+	assert.Equal(t, 1, result.disabledKeys)
+	assert.True(t, result.statusChanged)
+	assert.True(t, result.disabled)
+	assert.Equal(t, common.ChannelStatusAutoDisabled, channel.Status)
+
+	// A later compliant probe restores the keys this probe disabled and the
+	// channel with them.
+	result = channelRatioProbeResult{}
+	applyMultiKeyRatioProbeDecisions(channel, map[string]ratioProbeDecision{
+		"sk-a": {key: "sk-a", compliant: true, ratio: 1},
+		"sk-b": {key: "sk-b", compliant: true, ratio: 1},
+		"sk-c": {key: "sk-c", compliant: true, ratio: 1},
+	}, &result)
+
+	assert.Equal(t, 2, result.enabledKeys)
+	assert.True(t, result.statusChanged)
+	assert.True(t, result.enabled)
+	assert.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	assert.Equal(t, map[int]int{2: common.ChannelStatusManuallyDisabled}, channel.ChannelInfo.MultiKeyStatusList)
+	assert.Empty(t, channel.ChannelInfo.MultiKeyDisabledReason)
+	assert.Empty(t, channel.ChannelInfo.MultiKeyDisabledTime)
+}
+
+func TestApplyMultiKeyRatioProbeDecisionsKeepsRelayDisabledKeys(t *testing.T) {
+	channel := &model.Channel{
+		Status: common.ChannelStatusAutoDisabled,
+		Key:    "sk-a",
+		ChannelInfo: model.ChannelInfo{
+			IsMultiKey:             true,
+			MultiKeySize:           1,
+			MultiKeyStatusList:     map[int]int{0: common.ChannelStatusAutoDisabled},
+			MultiKeyDisabledReason: map[int]string{0: "invalid api key"},
+		},
+	}
+
+	result := channelRatioProbeResult{}
+	applyMultiKeyRatioProbeDecisions(channel, map[string]ratioProbeDecision{
+		"sk-a": {key: "sk-a", compliant: true, ratio: 1},
+	}, &result)
+
+	assert.Equal(t, 0, result.enabledKeys)
+	assert.False(t, result.statusChanged)
+	assert.Equal(t, common.ChannelStatusAutoDisabled, channel.Status)
+	assert.Equal(t, map[int]int{0: common.ChannelStatusAutoDisabled}, channel.ChannelInfo.MultiKeyStatusList)
+}
+
+func TestApplyMultiKeyRatioProbeDecisionsIgnoresFailedProbes(t *testing.T) {
+	channel := &model.Channel{
+		Status:      common.ChannelStatusEnabled,
+		Key:         "sk-a\nsk-b",
+		ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2},
+	}
+
+	result := channelRatioProbeResult{}
+	applyMultiKeyRatioProbeDecisions(channel, map[string]ratioProbeDecision{
+		"sk-a": {key: "sk-a", failed: true, message: "status code: 502"},
+		"sk-b": {key: "sk-b", failed: true, message: "status code: 502"},
+	}, &result)
+
+	assert.Equal(t, 0, result.disabledKeys)
+	assert.False(t, result.statusChanged)
+	assert.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	assert.Empty(t, channel.ChannelInfo.MultiKeyStatusList)
+}

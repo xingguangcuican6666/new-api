@@ -119,6 +119,24 @@ export interface ChannelOtherSettings {
   upstream_model_update_last_detected_models?: string[]
   advanced_custom?: AdvancedCustomConfig
   billing_query?: BillingQueryConfig
+  ratio_probe?: RatioProbeConfig
+}
+
+export interface RatioProbeConfig {
+  enabled?: boolean
+  source?: string
+  base_url?: string
+  path?: string
+  group?: string
+  max_group_ratio?: number
+  min_group_ratio?: number
+  use_api_key?: boolean
+  last_probe_time?: number
+  last_group_ratio?: number
+  last_status?: string
+  last_message?: string
+  last_enabled_keys?: number
+  last_disabled_keys?: number
 }
 
 export interface BillingQueryConfig {

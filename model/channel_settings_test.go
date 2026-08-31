@@ -63,6 +63,28 @@ func TestChannelValidateSettingsValidatesBillingQuery(t *testing.T) {
 	require.NoError(t, channel.ValidateSettings())
 }
 
+func TestChannelValidateSettingsValidatesRatioProbe(t *testing.T) {
+	maxRatio := 1.0
+	channel := &Channel{}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		RatioProbe: &dto.RatioProbeConfig{Enabled: true},
+	})
+
+	err := channel.ValidateSettings()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a max or min group ratio")
+
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		RatioProbe: &dto.RatioProbeConfig{
+			Enabled:       true,
+			Source:        dto.RatioProbeSourceCustom,
+			BaseURL:       "https://upstream.example",
+			MaxGroupRatio: &maxRatio,
+		},
+	})
+	require.NoError(t, channel.ValidateSettings())
+}
+
 func TestAdvancedCustomChannelRequiresModelListRouteOnlyWhenUpdateChecksEnabled(t *testing.T) {
 	inferenceRoute := dto.AdvancedCustomRoute{
 		IncomingPath: "/v1/chat/completions",
