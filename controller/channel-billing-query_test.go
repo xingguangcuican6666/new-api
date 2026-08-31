@@ -216,7 +216,7 @@ func TestFetchBillingQueryBalanceDoesNotUpdateForInvalidResponses(t *testing.T) 
 	}
 }
 
-func TestFetchBillingQueryBalanceClampsNegativeRemaining(t *testing.T) {
+func TestFetchBillingQueryBalancePreservesNegativeRemaining(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -241,11 +241,11 @@ func TestFetchBillingQueryBalanceClampsNegativeRemaining(t *testing.T) {
 	}
 	result, err := fetchBillingQueryBalance(channel, config)
 	require.NoError(t, err)
-	assert.Zero(t, result.Balance)
+	assert.Equal(t, -1.0, result.Balance)
 
 	var stored model.Channel
 	require.NoError(t, db.First(&stored, channel.Id).Error)
-	assert.Zero(t, stored.Balance)
+	assert.Equal(t, -1.0, stored.Balance)
 }
 
 func TestSanitizeBillingQueryErrorRemovesCredentials(t *testing.T) {
