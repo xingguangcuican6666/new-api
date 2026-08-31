@@ -27,7 +27,7 @@ func buildBillingQueryRequest(channel *model.Channel, config *dto.BillingQueryCo
 		return "", nil, err
 	}
 
-	requestURL := config.NormalizedBaseURL() + dto.BillingQueryCreditGrantsPath
+	requestURL := config.NormalizedBaseURL() + dto.BillingQueryNewAPITokenUsagePath
 	headers := http.Header{}
 	if config.UsesAPIKey() {
 		if key := strings.TrimSpace(channel.Key); key != "" {
@@ -57,7 +57,7 @@ func fetchBillingQueryBalance(channel *model.Channel, config *dto.BillingQueryCo
 	if err != nil {
 		return channelBalanceResult{}, sanitizeBillingQueryError(err, secrets...)
 	}
-	balance, err := parseCreditSummaryBalance(body)
+	balance, err := parseNewAPITokenUsageBalance(body)
 	if err != nil {
 		return channelBalanceResult{}, err
 	}
@@ -103,7 +103,7 @@ func getBillingQueryResponseBody(method string, requestURL string, channel *mode
 	return body, nil
 }
 
-func parseCreditSummaryBalance(body []byte) (float64, error) {
+func parseNewAPITokenUsageBalance(body []byte) (float64, error) {
 	var validated json.RawMessage
 	if err := common.Unmarshal(body, &validated); err != nil {
 		return 0, fmt.Errorf("invalid balance JSON response: %w", err)
@@ -113,24 +113,29 @@ func parseCreditSummaryBalance(body []byte) (float64, error) {
 	}
 
 	var response struct {
-		Object         string          `json:"object"`
-		TotalAvailable json.RawMessage `json:"total_available"`
+		Code bool `json:"code"`
+		Data *struct {
+			TotalAvailable json.RawMessage `json:"total_available"`
+		} `json:"data"`
 	}
 	if err := common.Unmarshal(body, &response); err != nil {
 		return 0, fmt.Errorf("invalid balance JSON response: %w", err)
 	}
-	if response.Object != "credit_summary" {
-		return 0, errors.New("invalid balance response: object must be credit_summary")
+	if !response.Code {
+		return 0, errors.New("invalid balance response: code must be true")
 	}
-	if len(response.TotalAvailable) == 0 || strings.EqualFold(string(response.TotalAvailable), "null") {
+	if response.Data == nil {
+		return 0, errors.New("invalid balance response: data is required")
+	}
+	if len(response.Data.TotalAvailable) == 0 || strings.EqualFold(string(response.Data.TotalAvailable), "null") {
 		return 0, errors.New("invalid balance response: total_available is required")
 	}
-	if common.GetJsonType(response.TotalAvailable) != "number" {
+	if common.GetJsonType(response.Data.TotalAvailable) != "number" {
 		return 0, errors.New("invalid balance response: total_available must be a number")
 	}
 
 	var balance float64
-	if err := common.Unmarshal(response.TotalAvailable, &balance); err != nil {
+	if err := common.Unmarshal(response.Data.TotalAvailable, &balance); err != nil {
 		return 0, fmt.Errorf("invalid balance response: total_available: %w", err)
 	}
 	if balance < 0 {

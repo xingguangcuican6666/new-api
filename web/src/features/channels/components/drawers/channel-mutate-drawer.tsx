@@ -138,6 +138,7 @@ import {
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
+  BILLING_QUERY_NEW_API_PATH,
   BILLING_QUERY_TYPE_NEW_API,
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
   CHANNEL_STATUS_LABELS,
@@ -750,7 +751,7 @@ export function ChannelMutateDrawer({
   const billingQueryRequestURL =
     billingQueryType === BILLING_QUERY_TYPE_NEW_API &&
     normalizedBillingQueryBaseURL
-      ? `${normalizedBillingQueryBaseURL}/dashboard/billing/credit_grants`
+      ? `${normalizedBillingQueryBaseURL}${BILLING_QUERY_NEW_API_PATH}`
       : ''
   let billingQueryAuthDescription = ''
   if (billingQueryType) {

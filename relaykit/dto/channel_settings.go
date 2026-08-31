@@ -66,8 +66,8 @@ const (
 )
 
 const (
-	BillingQueryTypeNewAPI       = "new_api"
-	BillingQueryCreditGrantsPath = "/dashboard/billing/credit_grants"
+	BillingQueryTypeNewAPI           = "new_api"
+	BillingQueryNewAPITokenUsagePath = "/api/usage/token/"
 )
 
 // BillingQueryConfig describes an optional channel-specific balance endpoint.

@@ -23,6 +23,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const CHANNEL_TYPE_NEW_API = 60
 export const BILLING_QUERY_TYPE_NEW_API = 'new_api'
+export const BILLING_QUERY_NEW_API_PATH = '/api/usage/token/'
 
 export const CHANNEL_TYPES = {
   0: 'Unknown',

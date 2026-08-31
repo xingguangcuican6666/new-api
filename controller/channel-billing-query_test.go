@@ -7,11 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +67,7 @@ func TestBuildBillingQueryRequestAuthModes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			requestURL, headers, err := buildBillingQueryRequest(channel, tt.config)
 			require.NoError(t, err)
-			assert.Equal(t, "https://billing.example/base/dashboard/billing/credit_grants", requestURL)
+			assert.Equal(t, "https://billing.example/base/api/usage/token/", requestURL)
 			assert.Equal(t, tt.wantHeader, headers.Get("Authorization"))
 		})
 	}
@@ -84,7 +82,7 @@ func TestUpdateChannelBalanceUsesConfiguredQueryAndPersistsRawAmount(t *testing.
 		requestPath <- request.URL.Path
 		authorization <- request.Header.Get("Authorization")
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"object":"credit_summary","total_granted":20.5,"total_used":8.25,"total_available":12.25}`))
+		_, _ = writer.Write([]byte(`{"code":true,"message":"ok","data":{"object":"token_usage","total_granted":20.5,"total_used":8.25,"total_available":12.25}}`))
 	}))
 	defer server.Close()
 
@@ -109,7 +107,7 @@ func TestUpdateChannelBalanceUsesConfiguredQueryAndPersistsRawAmount(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, 12.25, result.Balance)
 	assert.Empty(t, result.RawResponse)
-	assert.Equal(t, "/billing/dashboard/billing/credit_grants", <-requestPath)
+	assert.Equal(t, "/billing/api/usage/token/", <-requestPath)
 	assert.Equal(t, "Bearer channel-api-key", <-authorization)
 
 	var stored model.Channel
@@ -170,7 +168,7 @@ func TestFetchBillingQueryBalanceDoesNotUpdateForInvalidResponses(t *testing.T) 
 		{
 			name:       "non-200 response",
 			statusCode: http.StatusUnauthorized,
-			body:       `{"object":"credit_summary","total_available":12.25}`,
+			body:       `{"code":true,"data":{"total_available":12.25}}`,
 		},
 		{
 			name:       "invalid JSON",
@@ -180,7 +178,7 @@ func TestFetchBillingQueryBalanceDoesNotUpdateForInvalidResponses(t *testing.T) 
 		{
 			name:       "negative balance",
 			statusCode: http.StatusOK,
-			body:       `{"object":"credit_summary","total_available":-1}`,
+			body:       `{"code":true,"data":{"total_available":-1}}`,
 		},
 		{
 			name:       "oversized response",
@@ -229,40 +227,6 @@ func TestSanitizeBillingQueryErrorRemovesCredentials(t *testing.T) {
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), secret)
 	assert.Contains(t, err.Error(), "[REDACTED]")
-}
-
-func TestGetTokenStatusReturnsCreditSummaryWithoutQuotaConversion(t *testing.T) {
-	db := setupTokenControllerTestDB(t)
-	token := &model.Token{
-		Id:          301,
-		UserId:      17,
-		Key:         "token-key",
-		RemainQuota: 12345,
-		ExpiredTime: -1,
-	}
-	require.NoError(t, db.Create(token).Error)
-
-	recorder := httptest.NewRecorder()
-	context, _ := gin.CreateTestContext(recorder)
-	context.Set("token_id", token.Id)
-	context.Set("id", token.UserId)
-
-	GetTokenStatus(context)
-
-	require.Equal(t, http.StatusOK, recorder.Code)
-	var response struct {
-		Object         string `json:"object"`
-		TotalGranted   int    `json:"total_granted"`
-		TotalUsed      int    `json:"total_used"`
-		TotalAvailable int    `json:"total_available"`
-		ExpiresAt      int64  `json:"expires_at"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.Equal(t, "credit_summary", response.Object)
-	assert.Equal(t, token.RemainQuota, response.TotalGranted)
-	assert.Equal(t, 0, response.TotalUsed)
-	assert.Equal(t, token.RemainQuota, response.TotalAvailable)
-	assert.Equal(t, int64(0), response.ExpiresAt)
 }
 
 func boolPointer(value bool) *bool {

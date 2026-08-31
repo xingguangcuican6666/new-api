@@ -16,7 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { describe, expect, test } from 'vitest'
 
-import { BILLING_QUERY_TYPE_NEW_API } from '../../constants'
+import {
+  BILLING_QUERY_NEW_API_PATH,
+  BILLING_QUERY_TYPE_NEW_API,
+} from '../../constants'
 import type { Channel } from '../../types'
 import {
   CHANNEL_FORM_DEFAULT_VALUES,
@@ -85,6 +88,10 @@ function channelWithSettings(settings: string): Channel {
 }
 
 describe('channel billing query form settings', () => {
+  test('uses the New API token usage endpoint', () => {
+    expect(BILLING_QUERY_NEW_API_PATH).toBe('/api/usage/token/')
+  })
+
   test('requires an HTTP or HTTPS Base URL only when a query type is selected', () => {
     const defaultQuery = channelFormSchema.safeParse(
       billingForm({
