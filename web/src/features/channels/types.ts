@@ -118,6 +118,14 @@ export interface ChannelOtherSettings {
   upstream_model_update_last_check_time?: number
   upstream_model_update_last_detected_models?: string[]
   advanced_custom?: AdvancedCustomConfig
+  billing_query?: BillingQueryConfig
+}
+
+export interface BillingQueryConfig {
+  type?: string
+  base_url?: string
+  bearer_token?: string
+  use_api_key?: boolean
 }
 
 export interface AdvancedCustomConfig {

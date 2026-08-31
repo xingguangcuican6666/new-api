@@ -65,6 +65,60 @@ const (
 	AwsKeyTypeApiKey AwsKeyType = "api_key"
 )
 
+const (
+	BillingQueryTypeNewAPI       = "new_api"
+	BillingQueryCreditGrantsPath = "/dashboard/billing/credit_grants"
+)
+
+// BillingQueryConfig describes an optional channel-specific balance endpoint.
+// A nil UseAPIKey keeps compatibility with configurations written before the
+// authentication switch existed and means "use the channel API key".
+type BillingQueryConfig struct {
+	Type        string `json:"type,omitempty"`
+	BaseURL     string `json:"base_url,omitempty"`
+	BearerToken string `json:"bearer_token,omitempty"`
+	UseAPIKey   *bool  `json:"use_api_key,omitempty"`
+}
+
+func (c *BillingQueryConfig) Validate() error {
+	if c == nil {
+		return nil
+	}
+
+	queryType := strings.ToLower(strings.TrimSpace(c.Type))
+	if queryType == "" {
+		return fmt.Errorf("billing query type is required")
+	}
+	if queryType != BillingQueryTypeNewAPI {
+		return fmt.Errorf("unsupported billing query type: %s", c.Type)
+	}
+
+	baseURL := strings.TrimSpace(c.BaseURL)
+	parsedURL, err := url.ParseRequestURI(baseURL)
+	if err != nil || parsedURL.Hostname() == "" {
+		return fmt.Errorf("billing query base URL must be an absolute HTTP or HTTPS URL")
+	}
+	if scheme := strings.ToLower(parsedURL.Scheme); scheme != "http" && scheme != "https" {
+		return fmt.Errorf("billing query base URL must use HTTP or HTTPS")
+	}
+	if parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.ForceQuery || parsedURL.Fragment != "" ||
+		strings.Contains(baseURL, "?") || strings.Contains(baseURL, "#") {
+		return fmt.Errorf("billing query base URL must not contain credentials, query parameters, or fragments")
+	}
+	return nil
+}
+
+func (c *BillingQueryConfig) NormalizedBaseURL() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
+}
+
+func (c *BillingQueryConfig) UsesAPIKey() bool {
+	return c == nil || c.UseAPIKey == nil || *c.UseAPIKey
+}
+
 type ChannelOtherSettings struct {
 	RuntimeAutomaticDisableOverrideEnabled bool   `json:"runtime_automatic_disable_override_enabled,omitempty"`
 	RuntimeAutomaticDisableStatusCodes     string `json:"runtime_automatic_disable_status_codes,omitempty"`
@@ -99,6 +153,7 @@ type ChannelOtherSettings struct {
 	UpstreamModelUpdateLastRemovedModels  []string              `json:"upstream_model_update_last_removed_models,omitempty"`  // 上次检测到的可删除模型
 	UpstreamModelUpdateIgnoredModels      []string              `json:"upstream_model_update_ignored_models,omitempty"`       // 手动忽略的模型
 	AdvancedCustom                        *AdvancedCustomConfig `json:"advanced_custom,omitempty"`
+	BillingQuery                          *BillingQueryConfig   `json:"billing_query,omitempty"`
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

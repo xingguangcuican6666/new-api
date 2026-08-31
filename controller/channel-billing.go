@@ -53,7 +53,11 @@ type OpenAICreditGrants struct {
 	TotalAvailable float64 `json:"total_available"`
 }
 
-const maxAdvancedCustomBalanceResponseBytes = 256 << 10
+const maxChannelBalanceResponseBytes = 256 << 10
+
+// Keep the legacy name available for tests and callers in this package while
+// using one response limit for every balance query implementation.
+const maxAdvancedCustomBalanceResponseBytes = maxChannelBalanceResponseBytes
 
 type channelBalanceResult struct {
 	Balance     float64
@@ -414,12 +418,12 @@ func fetchAdvancedCustomBalance(channel *model.Channel) (channelBalanceResult, e
 	if response.StatusCode != http.StatusOK {
 		return channelBalanceResult{}, fmt.Errorf("status code: %d", response.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxAdvancedCustomBalanceResponseBytes+1))
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxChannelBalanceResponseBytes+1))
 	if err != nil {
 		return channelBalanceResult{}, sanitizeAdvancedCustomRequestError(err, key, requestURL)
 	}
-	if len(body) > maxAdvancedCustomBalanceResponseBytes {
-		return channelBalanceResult{}, fmt.Errorf("balance response exceeds %d bytes", maxAdvancedCustomBalanceResponseBytes)
+	if len(body) > maxChannelBalanceResponseBytes {
+		return channelBalanceResult{}, fmt.Errorf("balance response exceeds %d bytes", maxChannelBalanceResponseBytes)
 	}
 
 	var validated json.RawMessage
@@ -455,6 +459,12 @@ func fetchAdvancedCustomBalance(channel *model.Channel) (channelBalanceResult, e
 }
 
 func updateChannelBalance(channel *model.Channel) (channelBalanceResult, error) {
+	if channel == nil {
+		return channelBalanceResult{}, errors.New("channel is nil")
+	}
+	if billingQuery := channel.GetOtherSettings().BillingQuery; billingQuery != nil {
+		return fetchBillingQueryBalance(channel, billingQuery)
+	}
 	if channel.Type == constant.ChannelTypeAdvancedCustom {
 		return fetchAdvancedCustomBalance(channel)
 	}

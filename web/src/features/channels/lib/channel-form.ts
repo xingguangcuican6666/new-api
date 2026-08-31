@@ -16,10 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { z } from 'zod'
 import { t } from 'i18next'
+import { z } from 'zod'
+
+import { parseHttpStatusCodeRules } from '@/lib/http-status-code-rules'
 
 import {
+  BILLING_QUERY_TYPE_NEW_API,
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
   CHANNEL_TYPE_NEW_API,
   CHANNEL_STATUS,
@@ -29,7 +32,6 @@ import {
   OPENAI_FIELD_PASSTHROUGH_TYPES,
 } from '../constants'
 import type { Channel } from '../types'
-import { parseHttpStatusCodeRules } from '@/lib/http-status-code-rules'
 import {
   CHANNEL_TYPE_ADVANCED_CUSTOM,
   advancedCustomConfigUsesRelativeUpstreamPath,
@@ -186,6 +188,34 @@ function isVertexJsonKey(value: string | undefined): boolean {
   }
 }
 
+function isValidBillingQueryBaseURL(value: string | undefined): boolean {
+  const trimmedValue = value?.trim() || ''
+  if (!trimmedValue) return false
+
+  try {
+    const parsedURL = new URL(trimmedValue)
+    return (
+      (parsedURL.protocol === 'http:' || parsedURL.protocol === 'https:') &&
+      Boolean(parsedURL.hostname) &&
+      !parsedURL.username &&
+      !parsedURL.password &&
+      !parsedURL.search &&
+      !parsedURL.hash &&
+      !trimmedValue.includes('?') &&
+      !trimmedValue.includes('#')
+    )
+  } catch {
+    return false
+  }
+}
+
+const billingQuerySchema = z.object({
+  type: z.enum(['', BILLING_QUERY_TYPE_NEW_API]).optional(),
+  base_url: z.string().optional(),
+  bearer_token: z.string().optional(),
+  use_api_key: z.boolean().optional(),
+})
+
 function addRequiredIssue(
   ctx: z.RefinementCtx,
   path: string,
@@ -254,6 +284,7 @@ export const channelFormSchema = z
       .optional()
       .refine(isOptionalJsonObject, ERROR_MESSAGES.INVALID_JSON),
     advanced_custom: z.string().optional(),
+    billing_query: billingQuerySchema.optional(),
     other: z.string().optional(),
     // Multi-key options (not sent to backend directly)
     multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
@@ -292,6 +323,24 @@ export const channelFormSchema = z
     upstream_model_update_ignored_models: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    const billingQuery = data.billing_query
+    if (billingQuery?.type === BILLING_QUERY_TYPE_NEW_API) {
+      if (!billingQuery.base_url?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['billing_query', 'base_url'],
+          message: 'Balance query Base URL is required',
+        })
+      } else if (!isValidBillingQueryBaseURL(billingQuery.base_url)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['billing_query', 'base_url'],
+          message:
+            'Balance query Base URL must be an absolute HTTP or HTTPS URL without credentials, query parameters, or fragments',
+        })
+      }
+    }
+
     if (data.runtime_automatic_disable_override_enabled) {
       const parsed = parseHttpStatusCodeRules(
         data.runtime_automatic_disable_status_codes
@@ -482,6 +531,45 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
   advanced_custom: '',
+  billing_query: {
+    type: '',
+    base_url: '',
+    bearer_token: '',
+    use_api_key: true,
+  },
+}
+
+type BillingQueryFormValues = {
+  type: '' | typeof BILLING_QUERY_TYPE_NEW_API
+  base_url: string
+  bearer_token: string
+  use_api_key: boolean
+}
+
+const DEFAULT_BILLING_QUERY_FORM_VALUES: BillingQueryFormValues = {
+  type: '',
+  base_url: '',
+  bearer_token: '',
+  use_api_key: true,
+}
+
+function normalizeBillingQueryFormValues(
+  value: unknown
+): BillingQueryFormValues {
+  if (!isJsonObjectValue(value)) {
+    return { ...DEFAULT_BILLING_QUERY_FORM_VALUES }
+  }
+
+  return {
+    type:
+      value.type === BILLING_QUERY_TYPE_NEW_API
+        ? BILLING_QUERY_TYPE_NEW_API
+        : '',
+    base_url: typeof value.base_url === 'string' ? value.base_url : '',
+    bearer_token:
+      typeof value.bearer_token === 'string' ? value.bearer_token : '',
+    use_api_key: value.use_api_key !== false,
+  }
 }
 
 // ============================================================================
@@ -552,6 +640,7 @@ export function transformChannelToFormDefaults(
   let emptyResponseRetryOverrideEnabled = false
   let emptyResponseRetryEnabled = false
   let emptyResponseRetryInPlace = true
+  let billingQuery = { ...DEFAULT_BILLING_QUERY_FORM_VALUES }
 
   if (channel.settings) {
     try {
@@ -580,6 +669,7 @@ export function transformChannelToFormDefaults(
       if (parsed.advanced_custom) {
         advancedCustom = stringifyAdvancedCustomConfig(parsed.advanced_custom)
       }
+      billingQuery = normalizeBillingQueryFormValues(parsed.billing_query)
       automaticDisableOverrideEnabled =
         parsed.runtime_automatic_disable_override_enabled === true ||
         parsed.automatic_disable_override_enabled === true
@@ -646,6 +736,7 @@ export function transformChannelToFormDefaults(
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
+    billing_query: billingQuery,
     runtime_automatic_disable_override_enabled: automaticDisableOverrideEnabled,
     runtime_automatic_disable_status_codes: automaticDisableStatusCodes,
     runtime_automatic_disable_keywords: automaticDisableKeywords,
@@ -845,7 +936,26 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     delete settingsObj.advanced_custom
   }
 
+  if (formData.billing_query?.type === BILLING_QUERY_TYPE_NEW_API) {
+    settingsObj.billing_query = {
+      type: BILLING_QUERY_TYPE_NEW_API,
+      base_url: normalizeBillingQueryBaseURL(formData.billing_query.base_url),
+      bearer_token: formData.billing_query.bearer_token?.trim() || '',
+      use_api_key: formData.billing_query.use_api_key !== false,
+    }
+  } else if ('billing_query' in settingsObj) {
+    delete settingsObj.billing_query
+  }
+
   return JSON.stringify(settingsObj)
+}
+
+export function normalizeBillingQueryBaseURL(
+  value: string | undefined
+): string {
+  return String(value || '')
+    .trim()
+    .replace(/\/+$/, '')
 }
 
 function normalizeBaseUrl(value: string | undefined): string {

@@ -138,6 +138,7 @@ import {
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
+  BILLING_QUERY_TYPE_NEW_API,
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
   CHANNEL_STATUS_LABELS,
   CHANNEL_TYPE_OPTIONS,
@@ -268,6 +269,7 @@ const ADVANCED_SETTINGS_CHILD_SECTION_IDS: string[] = Object.values(
 )
 const ADVANCED_CUSTOM_ROUTE_TYPE_PREVIEW_LIMIT = 3
 const UPSTREAM_DETECTED_MODEL_PREVIEW_LIMIT = 8
+const BILLING_QUERY_DEFAULT_OPTION = '__channel_default__'
 const SENSITIVE_FORM_FIELDS = [
   'type',
   'base_url',
@@ -280,6 +282,7 @@ const SENSITIVE_FORM_FIELDS = [
   'settings',
   'setting',
   'advanced_custom',
+  'billing_query',
   'is_enterprise_account',
   'vertex_key_type',
   'aws_key_type',
@@ -737,6 +740,29 @@ export function ChannelMutateDrawer({
   )
   const currentSettings = form.watch('settings')
   const currentAdvancedCustom = form.watch('advanced_custom')
+  const currentBillingQuery = form.watch('billing_query')
+  const billingQueryType = currentBillingQuery?.type || ''
+  const billingQueryBaseURL = currentBillingQuery?.base_url || ''
+  const billingQueryUsesAPIKey = currentBillingQuery?.use_api_key !== false
+  const normalizedBillingQueryBaseURL = billingQueryBaseURL
+    .trim()
+    .replace(/\/+$/, '')
+  const billingQueryRequestURL =
+    billingQueryType === BILLING_QUERY_TYPE_NEW_API &&
+    normalizedBillingQueryBaseURL
+      ? `${normalizedBillingQueryBaseURL}/dashboard/billing/credit_grants`
+      : ''
+  let billingQueryAuthDescription = ''
+  if (billingQueryType) {
+    billingQueryAuthDescription = t('No Authorization header will be sent.')
+    if (billingQueryUsesAPIKey) {
+      billingQueryAuthDescription = t(
+        'The channel API key will be sent as the Bearer token.'
+      )
+    } else if (currentBillingQuery?.bearer_token?.trim()) {
+      billingQueryAuthDescription = t('The custom Bearer token will be sent.')
+    }
+  }
   const currentPriority = form.watch('priority')
   const currentWeight = form.watch('weight')
   const currentTestModel = form.watch('test_model')
@@ -962,7 +988,11 @@ export function ChannelMutateDrawer({
     formErrors.key_mode ||
     formErrors.vertex_key_type ||
     formErrors.aws_key_type ||
-    formErrors.azure_responses_version
+    formErrors.azure_responses_version ||
+    formErrors.billing_query?.type ||
+    formErrors.billing_query?.base_url ||
+    formErrors.billing_query?.bearer_token ||
+    formErrors.billing_query?.use_api_key
   )
   const modelsHaveErrors = Boolean(
     formErrors.models || formErrors.group || formErrors.model_mapping
@@ -2874,6 +2904,184 @@ export function ChannelMutateDrawer({
                                 )}
                               />
                             )}
+
+                            <div className='border-border/60 flex flex-col gap-3 border-t pt-4'>
+                              <div className='flex items-center gap-2'>
+                                <Settings
+                                  className='text-muted-foreground h-3.5 w-3.5'
+                                  aria-hidden='true'
+                                />
+                                <h4 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                                  {t('Balance Query Settings')}
+                                </h4>
+                              </div>
+
+                              <FormField
+                                control={form.control}
+                                name='billing_query.type'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Balance query type')}
+                                    </FormLabel>
+                                    <Select
+                                      items={[
+                                        {
+                                          value: BILLING_QUERY_DEFAULT_OPTION,
+                                          label: t(
+                                            'Use channel default balance query'
+                                          ),
+                                        },
+                                        {
+                                          value: BILLING_QUERY_TYPE_NEW_API,
+                                          label: t('New API'),
+                                        },
+                                      ]}
+                                      onValueChange={(value) => {
+                                        field.onChange(
+                                          value === BILLING_QUERY_DEFAULT_OPTION
+                                            ? ''
+                                            : value
+                                        )
+                                      }}
+                                      value={
+                                        field.value ||
+                                        BILLING_QUERY_DEFAULT_OPTION
+                                      }
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue
+                                            placeholder={t(
+                                              'Select a balance query type'
+                                            )}
+                                          />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent
+                                        alignItemWithTrigger={false}
+                                      >
+                                        <SelectGroup>
+                                          <SelectItem
+                                            value={BILLING_QUERY_DEFAULT_OPTION}
+                                          >
+                                            {t(
+                                              'Use channel default balance query'
+                                            )}
+                                          </SelectItem>
+                                          <SelectItem
+                                            value={BILLING_QUERY_TYPE_NEW_API}
+                                          >
+                                            {t('New API')}
+                                          </SelectItem>
+                                        </SelectGroup>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormDescription>
+                                      {t(
+                                        'Leave this empty to keep the channel type default balance query.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name='billing_query.base_url'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Balance query Base URL')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder={t(
+                                          'e.g., https://new-api.example.com'
+                                        )}
+                                        disabled={!billingQueryType}
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {billingQueryRequestURL ? (
+                                        <>
+                                          {t(
+                                            'This URL is independent from the channel relay Base URL.'
+                                          )}{' '}
+                                          <span className='block font-mono text-xs'>
+                                            {t('Request')}: GET{' '}
+                                            {billingQueryRequestURL}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        t(
+                                          'Configure a balance query type to show the request path.'
+                                        )
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name='billing_query.use_api_key'
+                                render={({ field }) => (
+                                  <FormItem className='flex items-center justify-between gap-4'>
+                                    <div className='space-y-0.5'>
+                                      <FormLabel>
+                                        {t('Use channel API key')}
+                                      </FormLabel>
+                                      <FormDescription>
+                                        {billingQueryAuthDescription}
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value !== false}
+                                        disabled={!billingQueryType}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name='billing_query.bearer_token'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Custom Bearer token')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type='password'
+                                        autoComplete='off'
+                                        placeholder={t(
+                                          'Enter an independent Bearer token'
+                                        )}
+                                        disabled={
+                                          !billingQueryType ||
+                                          billingQueryUsesAPIKey
+                                        }
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        'Used only when Use channel API key is disabled. Leave empty to send no Authorization header.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
 
                             <ChannelAuthSection>
                               {!isEditing && (

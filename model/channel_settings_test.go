@@ -41,6 +41,28 @@ func TestChannelValidateSettingsRejectsInvalidHTTPTransport(t *testing.T) {
 	}
 }
 
+func TestChannelValidateSettingsValidatesBillingQuery(t *testing.T) {
+	channel := &Channel{}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		BillingQuery: &dto.BillingQueryConfig{
+			Type:    dto.BillingQueryTypeNewAPI,
+			BaseURL: "ftp://billing.example",
+		},
+	})
+
+	err := channel.ValidateSettings()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP or HTTPS")
+
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		BillingQuery: &dto.BillingQueryConfig{
+			Type:    dto.BillingQueryTypeNewAPI,
+			BaseURL: "https://billing.example/",
+		},
+	})
+	require.NoError(t, channel.ValidateSettings())
+}
+
 func TestAdvancedCustomChannelRequiresModelListRouteOnlyWhenUpdateChecksEnabled(t *testing.T) {
 	inferenceRoute := dto.AdvancedCustomRoute{
 		IncomingPath: "/v1/chat/completions",
