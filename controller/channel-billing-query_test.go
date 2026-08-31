@@ -176,11 +176,6 @@ func TestFetchBillingQueryBalanceDoesNotUpdateForInvalidResponses(t *testing.T) 
 			body:       "not-json",
 		},
 		{
-			name:       "negative balance",
-			statusCode: http.StatusOK,
-			body:       `{"code":true,"data":{"total_available":-1}}`,
-		},
-		{
 			name:       "oversized response",
 			statusCode: http.StatusOK,
 			body:       strings.Repeat("x", maxChannelBalanceResponseBytes+1),
@@ -219,6 +214,38 @@ func TestFetchBillingQueryBalanceDoesNotUpdateForInvalidResponses(t *testing.T) 
 			assert.Equal(t, 7.0, stored.Balance)
 		})
 	}
+}
+
+func TestFetchBillingQueryBalanceClampsNegativeRemaining(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"code":true,"data":{"total_available":-1,"unlimited_quota":false}}`))
+	}))
+	defer server.Close()
+
+	baseURL := "https://relay.example.invalid"
+	channel := &model.Channel{
+		Type:    constant.ChannelTypeOpenAI,
+		Key:     "channel-api-key",
+		Name:    "negative billing response",
+		BaseURL: &baseURL,
+		Balance: 7,
+	}
+	require.NoError(t, db.Create(channel).Error)
+
+	config := &dto.BillingQueryConfig{
+		Type:      dto.BillingQueryTypeNewAPI,
+		BaseURL:   server.URL,
+		UseAPIKey: boolPointer(false),
+	}
+	result, err := fetchBillingQueryBalance(channel, config)
+	require.NoError(t, err)
+	assert.Zero(t, result.Balance)
+
+	var stored model.Channel
+	require.NoError(t, db.First(&stored, channel.Id).Error)
+	assert.Zero(t, stored.Balance)
 }
 
 func TestSanitizeBillingQueryErrorRemovesCredentials(t *testing.T) {

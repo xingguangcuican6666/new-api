@@ -138,13 +138,16 @@ func parseNewAPITokenUsageBalance(body []byte) (float64, error) {
 	if err := common.Unmarshal(response.Data.TotalAvailable, &balance); err != nil {
 		return 0, fmt.Errorf("invalid balance response: total_available: %w", err)
 	}
-	if balance < 0 {
-		return 0, errors.New("invalid balance response: total_available must not be negative")
-	}
 	// JSON cannot normally represent NaN or infinity, but keep the check here
 	// because the value is converted to float64 before it is persisted.
 	if math.IsNaN(balance) || math.IsInf(balance, 0) {
 		return 0, errors.New("invalid balance response: total_available must be finite")
+	}
+	// New API may report a small negative remainder after a token is exhausted.
+	// Channel.Balance is a non-negative availability value, so normalize that
+	// upstream remainder instead of failing the entire balance refresh.
+	if balance < 0 {
+		return 0, nil
 	}
 	return balance, nil
 }
