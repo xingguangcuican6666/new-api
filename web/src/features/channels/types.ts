@@ -125,6 +125,7 @@ export interface BillingQueryConfig {
   type?: string
   base_url?: string
   bearer_token?: string
+  user_id?: string
   use_api_key?: boolean
 }
 

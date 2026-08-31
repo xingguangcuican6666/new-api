@@ -24,14 +24,17 @@ func TestBuildBillingQueryRequestAuthModes(t *testing.T) {
 		name       string
 		config     *dto.BillingQueryConfig
 		wantHeader string
+		wantUserID string
 	}{
 		{
 			name: "omitted switch uses channel key",
 			config: &dto.BillingQueryConfig{
 				Type:    dto.BillingQueryTypeNewAPI,
 				BaseURL: baseURL,
+				UserID:  "1001",
 			},
 			wantHeader: "Bearer channel-api-key",
+			wantUserID: "1001",
 		},
 		{
 			name: "enabled switch uses channel key",
@@ -67,8 +70,12 @@ func TestBuildBillingQueryRequestAuthModes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			requestURL, headers, err := buildBillingQueryRequest(channel, tt.config)
 			require.NoError(t, err)
-			assert.Equal(t, "https://billing.example/base/api/usage/token/", requestURL)
+			assert.Equal(t, "https://billing.example/base/api/user/self", requestURL)
 			assert.Equal(t, tt.wantHeader, headers.Get("Authorization"))
+			assert.Equal(t, "application/json", headers.Get("Accept"))
+			assert.Equal(t, "application/json", headers.Get("Content-Type"))
+			assert.Equal(t, "cc-switch/1.0", headers.Get("User-Agent"))
+			assert.Equal(t, tt.wantUserID, headers.Get("New-Api-User"))
 		})
 	}
 }
@@ -78,11 +85,13 @@ func TestUpdateChannelBalanceUsesConfiguredQueryAndPersistsRawAmount(t *testing.
 
 	requestPath := make(chan string, 1)
 	authorization := make(chan string, 1)
+	userID := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requestPath <- request.URL.Path
 		authorization <- request.Header.Get("Authorization")
+		userID <- request.Header.Get("New-Api-User")
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"code":true,"message":"ok","data":{"object":"token_usage","total_granted":20.5,"total_used":8.25,"total_available":12.25}}`))
+		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"group":"default","quota":1250000,"used_quota":250000}}`))
 	}))
 	defer server.Close()
 
@@ -98,6 +107,7 @@ func TestUpdateChannelBalanceUsesConfiguredQueryAndPersistsRawAmount(t *testing.
 		BillingQuery: &dto.BillingQueryConfig{
 			Type:      dto.BillingQueryTypeNewAPI,
 			BaseURL:   server.URL + "/billing///",
+			UserID:    "1001",
 			UseAPIKey: boolPointer(true),
 		},
 	})
@@ -105,14 +115,15 @@ func TestUpdateChannelBalanceUsesConfiguredQueryAndPersistsRawAmount(t *testing.
 
 	result, err := updateChannelBalance(channel)
 	require.NoError(t, err)
-	assert.Equal(t, 12.25, result.Balance)
+	assert.Equal(t, 2.5, result.Balance)
 	assert.Empty(t, result.RawResponse)
-	assert.Equal(t, "/billing/api/usage/token/", <-requestPath)
+	assert.Equal(t, "/billing/api/user/self", <-requestPath)
 	assert.Equal(t, "Bearer channel-api-key", <-authorization)
+	assert.Equal(t, "1001", <-userID)
 
 	var stored model.Channel
 	require.NoError(t, db.First(&stored, channel.Id).Error)
-	assert.Equal(t, 12.25, stored.Balance)
+	assert.Equal(t, 2.5, stored.Balance)
 }
 
 func TestUpdateChannelBalanceKeepsAdvancedCustomFallbackWithoutBillingQuery(t *testing.T) {
@@ -168,7 +179,7 @@ func TestFetchBillingQueryBalanceDoesNotUpdateForInvalidResponses(t *testing.T) 
 		{
 			name:       "non-200 response",
 			statusCode: http.StatusUnauthorized,
-			body:       `{"code":true,"data":{"total_available":12.25}}`,
+			body:       `{"success":true,"data":{"quota":1250000}}`,
 		},
 		{
 			name:       "invalid JSON",
@@ -220,7 +231,7 @@ func TestFetchBillingQueryBalancePreservesNegativeRemaining(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"code":true,"data":{"total_available":-1,"unlimited_quota":false}}`))
+		_, _ = writer.Write([]byte(`{"success":true,"data":{"quota":-500000,"used_quota":0}}`))
 	}))
 	defer server.Close()
 

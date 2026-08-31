@@ -66,8 +66,8 @@ const (
 )
 
 const (
-	BillingQueryTypeNewAPI           = "new_api"
-	BillingQueryNewAPITokenUsagePath = "/api/usage/token/"
+	BillingQueryTypeNewAPI         = "new_api"
+	BillingQueryNewAPIUserSelfPath = "/api/user/self"
 )
 
 // BillingQueryConfig describes an optional channel-specific balance endpoint.
@@ -77,6 +77,7 @@ type BillingQueryConfig struct {
 	Type        string `json:"type,omitempty"`
 	BaseURL     string `json:"base_url,omitempty"`
 	BearerToken string `json:"bearer_token,omitempty"`
+	UserID      string `json:"user_id,omitempty"`
 	UseAPIKey   *bool  `json:"use_api_key,omitempty"`
 }
 

@@ -2990,6 +2990,32 @@ export function ChannelMutateDrawer({
 
                               <FormField
                                 control={form.control}
+                                name='billing_query.user_id'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('New API user ID')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        inputMode='numeric'
+                                        placeholder='123'
+                                        disabled={!billingQueryType}
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        'Sent as the New-Api-User header when provided.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
                                 name='billing_query.base_url'
                                 render={({ field }) => (
                                   <FormItem>

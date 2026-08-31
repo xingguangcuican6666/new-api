@@ -213,6 +213,7 @@ const billingQuerySchema = z.object({
   type: z.enum(['', BILLING_QUERY_TYPE_NEW_API]).optional(),
   base_url: z.string().optional(),
   bearer_token: z.string().optional(),
+  user_id: z.string().optional(),
   use_api_key: z.boolean().optional(),
 })
 
@@ -535,6 +536,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
     type: '',
     base_url: '',
     bearer_token: '',
+    user_id: '',
     use_api_key: true,
   },
 }
@@ -543,6 +545,7 @@ type BillingQueryFormValues = {
   type: '' | typeof BILLING_QUERY_TYPE_NEW_API
   base_url: string
   bearer_token: string
+  user_id: string
   use_api_key: boolean
 }
 
@@ -550,6 +553,7 @@ const DEFAULT_BILLING_QUERY_FORM_VALUES: BillingQueryFormValues = {
   type: '',
   base_url: '',
   bearer_token: '',
+  user_id: '',
   use_api_key: true,
 }
 
@@ -568,6 +572,7 @@ function normalizeBillingQueryFormValues(
     base_url: typeof value.base_url === 'string' ? value.base_url : '',
     bearer_token:
       typeof value.bearer_token === 'string' ? value.bearer_token : '',
+    user_id: typeof value.user_id === 'string' ? value.user_id : '',
     use_api_key: value.use_api_key !== false,
   }
 }
@@ -941,6 +946,7 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
       type: BILLING_QUERY_TYPE_NEW_API,
       base_url: normalizeBillingQueryBaseURL(formData.billing_query.base_url),
       bearer_token: formData.billing_query.bearer_token?.trim() || '',
+      user_id: formData.billing_query.user_id?.trim() || '',
       use_api_key: formData.billing_query.use_api_key !== false,
     }
   } else if ('billing_query' in settingsObj) {

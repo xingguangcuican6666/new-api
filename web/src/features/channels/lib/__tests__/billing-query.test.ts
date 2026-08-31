@@ -48,6 +48,7 @@ function configuredBillingForm() {
         type: BILLING_QUERY_TYPE_NEW_API,
         base_url: ' https://billing.example/api/// ',
         bearer_token: ' custom-token ',
+        user_id: ' 1001 ',
         use_api_key: false,
       },
     })
@@ -88,8 +89,8 @@ function channelWithSettings(settings: string): Channel {
 }
 
 describe('channel billing query form settings', () => {
-  test('uses the New API token usage endpoint', () => {
-    expect(BILLING_QUERY_NEW_API_PATH).toBe('/api/usage/token/')
+  test('uses the New API user self endpoint', () => {
+    expect(BILLING_QUERY_NEW_API_PATH).toBe('/api/user/self')
   })
 
   test('requires an HTTP or HTTPS Base URL only when a query type is selected', () => {
@@ -145,6 +146,7 @@ describe('channel billing query form settings', () => {
             type: BILLING_QUERY_TYPE_NEW_API,
             base_url: 'https://billing.example/api/',
             bearer_token: 'custom-token',
+            user_id: '1001',
             use_api_key: false,
           },
         })
@@ -155,6 +157,7 @@ describe('channel billing query form settings', () => {
       type: BILLING_QUERY_TYPE_NEW_API,
       base_url: 'https://billing.example/api/',
       bearer_token: 'custom-token',
+      user_id: '1001',
       use_api_key: false,
     })
   })
@@ -169,6 +172,7 @@ describe('channel billing query form settings', () => {
       type: BILLING_QUERY_TYPE_NEW_API,
       base_url: 'https://billing.example/api',
       bearer_token: 'custom-token',
+      user_id: '1001',
       use_api_key: false,
     })
 

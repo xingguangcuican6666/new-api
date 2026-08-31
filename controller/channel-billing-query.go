@@ -16,6 +16,8 @@ import (
 	"github.com/QuantumNous/new-api/service"
 )
 
+const newAPIUserQuotaPerUSD = 500000.0
+
 func buildBillingQueryRequest(channel *model.Channel, config *dto.BillingQueryConfig) (string, http.Header, error) {
 	if channel == nil {
 		return "", nil, errors.New("channel is nil")
@@ -27,8 +29,14 @@ func buildBillingQueryRequest(channel *model.Channel, config *dto.BillingQueryCo
 		return "", nil, err
 	}
 
-	requestURL := config.NormalizedBaseURL() + dto.BillingQueryNewAPITokenUsagePath
+	requestURL := config.NormalizedBaseURL() + dto.BillingQueryNewAPIUserSelfPath
 	headers := http.Header{}
+	headers.Set("Accept", "application/json")
+	headers.Set("Content-Type", "application/json")
+	headers.Set("User-Agent", "cc-switch/1.0")
+	if userID := strings.TrimSpace(config.UserID); userID != "" {
+		headers.Set("New-Api-User", userID)
+	}
 	if config.UsesAPIKey() {
 		if key := strings.TrimSpace(channel.Key); key != "" {
 			headers.Set("Authorization", "Bearer "+key)
@@ -57,7 +65,7 @@ func fetchBillingQueryBalance(channel *model.Channel, config *dto.BillingQueryCo
 	if err != nil {
 		return channelBalanceResult{}, sanitizeBillingQueryError(err, secrets...)
 	}
-	balance, err := parseNewAPITokenUsageBalance(body)
+	balance, err := parseNewAPIUserSelfBalance(body)
 	if err != nil {
 		return channelBalanceResult{}, err
 	}
@@ -103,7 +111,7 @@ func getBillingQueryResponseBody(method string, requestURL string, channel *mode
 	return body, nil
 }
 
-func parseNewAPITokenUsageBalance(body []byte) (float64, error) {
+func parseNewAPIUserSelfBalance(body []byte) (float64, error) {
 	var validated json.RawMessage
 	if err := common.Unmarshal(body, &validated); err != nil {
 		return 0, fmt.Errorf("invalid balance JSON response: %w", err)
@@ -113,37 +121,37 @@ func parseNewAPITokenUsageBalance(body []byte) (float64, error) {
 	}
 
 	var response struct {
-		Code bool `json:"code"`
-		Data *struct {
-			TotalAvailable json.RawMessage `json:"total_available"`
+		Success bool `json:"success"`
+		Data    *struct {
+			Quota json.RawMessage `json:"quota"`
 		} `json:"data"`
 	}
 	if err := common.Unmarshal(body, &response); err != nil {
 		return 0, fmt.Errorf("invalid balance JSON response: %w", err)
 	}
-	if !response.Code {
-		return 0, errors.New("invalid balance response: code must be true")
+	if !response.Success {
+		return 0, errors.New("invalid balance response: success must be true")
 	}
 	if response.Data == nil {
 		return 0, errors.New("invalid balance response: data is required")
 	}
-	if len(response.Data.TotalAvailable) == 0 || strings.EqualFold(string(response.Data.TotalAvailable), "null") {
-		return 0, errors.New("invalid balance response: total_available is required")
+	if len(response.Data.Quota) == 0 || strings.EqualFold(string(response.Data.Quota), "null") {
+		return 0, errors.New("invalid balance response: quota is required")
 	}
-	if common.GetJsonType(response.Data.TotalAvailable) != "number" {
-		return 0, errors.New("invalid balance response: total_available must be a number")
+	if common.GetJsonType(response.Data.Quota) != "number" {
+		return 0, errors.New("invalid balance response: quota must be a number")
 	}
 
-	var balance float64
-	if err := common.Unmarshal(response.Data.TotalAvailable, &balance); err != nil {
-		return 0, fmt.Errorf("invalid balance response: total_available: %w", err)
+	var quota float64
+	if err := common.Unmarshal(response.Data.Quota, &quota); err != nil {
+		return 0, fmt.Errorf("invalid balance response: quota: %w", err)
 	}
 	// JSON cannot normally represent NaN or infinity, but keep the check here
 	// because the value is converted to float64 before it is persisted.
-	if math.IsNaN(balance) || math.IsInf(balance, 0) {
-		return 0, errors.New("invalid balance response: total_available must be finite")
+	if math.IsNaN(quota) || math.IsInf(quota, 0) {
+		return 0, errors.New("invalid balance response: quota must be finite")
 	}
-	return balance, nil
+	return quota / newAPIUserQuotaPerUSD, nil
 }
 
 func sanitizeBillingQueryError(err error, secrets ...string) error {
