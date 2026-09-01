@@ -25,8 +25,6 @@ const (
 	channelRatioProbeTaskBatchSize              = 100
 	channelRatioProbeRequestTimeout             = 10 * time.Second
 	channelRatioProbeMaxResponseBytes           = 1 << 20 // 1MB
-	channelRatioProbeMaxRequestBytes            = 16 << 10
-	channelRatioProbeMaxAuthorizationBytes      = 8 << 10
 	channelRatioProbeKeyConcurrency             = 4
 	channelRatioProbeMaxKeysPerChannel          = 500
 
@@ -111,15 +109,18 @@ func describeRatioProbeRejection(config *dto.RatioProbeConfig, ratio float64) st
 	return fmt.Sprintf("group %s ratio %g is not accepted", group, ratio)
 }
 
-func (runner *channelRatioProbeRunner) probeKey(config *dto.RatioProbeConfig, requestURL string, proxy string, key string, authorizationOverride *string) ratioProbeDecision {
+// probeKey fetches one upstream document and judges it. The Authorization header
+// is either the probed key as a Bearer token or the configured header value, so a
+// probe endpoint guarded by its own credential is reachable without exposing the
+// channel key to it.
+func (runner *channelRatioProbeRunner) probeKey(config *dto.RatioProbeConfig, requestURL string, proxy string, key string) ratioProbeDecision {
 	authorization := ""
-	if authorizationOverride != nil {
-		authorization = strings.TrimSpace(*authorizationOverride)
-	} else if config.UsesAPIKey() {
-		credential := strings.TrimSpace(key)
-		if credential != "" {
+	if config.UsesAPIKey() {
+		if credential := strings.TrimSpace(key); credential != "" {
 			authorization = "Bearer " + credential
 		}
+	} else {
+		authorization = config.NormalizedAuthorization()
 	}
 	cacheKey := strings.Join([]string{requestURL, authorization, proxy}, "\x00")
 
@@ -205,10 +206,6 @@ type channelRatioProbeTestData struct {
 	Results    []channelRatioProbeTestResult `json:"results"`
 }
 
-type channelRatioProbeTestRequest struct {
-	Authorization string `json:"authorization"`
-}
-
 func buildChannelRatioProbeTestResults(channel *model.Channel, config *dto.RatioProbeConfig, decisions []ratioProbeDecision) []channelRatioProbeTestResult {
 	keyIndexes := make(map[string]int)
 	if channel.ChannelInfo.IsMultiKey {
@@ -266,31 +263,6 @@ func TestChannelRatioProbe(c *gin.Context) {
 		}
 	}
 
-	authorization := ""
-	if c.Request != nil && c.Request.Method == http.MethodPost && c.Request.Body != nil {
-		body, err := io.ReadAll(io.LimitReader(c.Request.Body, channelRatioProbeMaxRequestBytes+1))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid ratio probe request"})
-			return
-		}
-		if len(body) > channelRatioProbeMaxRequestBytes {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "ratio probe request is too large"})
-			return
-		}
-		if strings.TrimSpace(string(body)) != "" {
-			var request channelRatioProbeTestRequest
-			if err := common.Unmarshal(body, &request); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid ratio probe request"})
-				return
-			}
-			authorization = strings.TrimSpace(request.Authorization)
-		}
-	}
-	if len(authorization) > channelRatioProbeMaxAuthorizationBytes || strings.ContainsAny(authorization, "\r\n") {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid Authorization header"})
-		return
-	}
-
 	config := channel.GetOtherSettings().RatioProbe
 	if err := config.Validate(); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
@@ -307,7 +279,7 @@ func TestChannelRatioProbe(c *gin.Context) {
 		requestCtx = c.Request.Context()
 	}
 	runner := newChannelRatioProbeRunner(requestCtx)
-	decisions := runner.collectChannelRatioProbeDecisions(channel, config, requestURL, &authorization)
+	decisions := runner.collectChannelRatioProbeDecisions(channel, config, requestURL)
 	if len(decisions) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -395,10 +367,10 @@ func parseUpstreamGroupRatios(body []byte) (map[string]float64, error) {
 // collectChannelRatioProbeDecisions probes every distinct credential of a
 // channel in key order. Single-key channels contribute exactly one decision
 // keyed by the whole key string, matching how the channel stores its credential.
-func (runner *channelRatioProbeRunner) collectChannelRatioProbeDecisions(channel *model.Channel, config *dto.RatioProbeConfig, requestURL string, authorizationOverride *string) []ratioProbeDecision {
+func (runner *channelRatioProbeRunner) collectChannelRatioProbeDecisions(channel *model.Channel, config *dto.RatioProbeConfig, requestURL string) []ratioProbeDecision {
 	proxy := channel.GetSetting().Proxy
 	if !channel.ChannelInfo.IsMultiKey {
-		return []ratioProbeDecision{runner.probeKey(config, requestURL, proxy, channel.Key, authorizationOverride)}
+		return []ratioProbeDecision{runner.probeKey(config, requestURL, proxy, channel.Key)}
 	}
 
 	keys := channel.GetKeys()
@@ -440,7 +412,7 @@ func (runner *channelRatioProbeRunner) collectChannelRatioProbeDecisions(channel
 					decisions[index] = ratioProbeDecision{key: key, failed: true, message: "probe panicked"}
 				}
 			}()
-			decisions[index] = runner.probeKey(config, requestURL, proxy, key, authorizationOverride)
+			decisions[index] = runner.probeKey(config, requestURL, proxy, key)
 		}(index, key)
 	}
 	waitGroup.Wait()
@@ -688,7 +660,7 @@ func (runner *channelRatioProbeRunner) probeChannelRatio(channel *model.Channel,
 		return applyChannelRatioProbe(channel.Id, []ratioProbeDecision{{key: channel.Key, failed: true, message: err.Error()}})
 	}
 
-	decisions := runner.collectChannelRatioProbeDecisions(channel, config, requestURL, nil)
+	decisions := runner.collectChannelRatioProbeDecisions(channel, config, requestURL)
 	if len(decisions) == 0 {
 		// The run was cancelled before any credential was probed.
 		return channelRatioProbeResult{}, nil

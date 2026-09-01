@@ -188,7 +188,7 @@ func TestBuildChannelRatioProbeTestResultsMarksDisabledProbeUnconfigured(t *test
 	assert.Equal(t, 1.0, *results[0].Ratio)
 }
 
-func TestChannelRatioProbeAuthorizationOverride(t *testing.T) {
+func TestChannelRatioProbeConfiguredAuthorization(t *testing.T) {
 	receivedAuthorization := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		receivedAuthorization <- request.Header.Get("Authorization")
@@ -197,36 +197,46 @@ func TestChannelRatioProbeAuthorizationOverride(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := &dto.RatioProbeConfig{
-		Enabled:       true,
-		MaxGroupRatio: ratioProbeFloat(1),
-	}
-	emptyAuthorization := ""
-	customAuthorization := "Basic manual-token"
+	useAPIKey := true
+	skipAPIKey := false
 	tests := []struct {
 		name          string
-		authorization *string
+		useAPIKey     *bool
+		authorization string
 		wantHeader    string
 	}{
 		{
-			name:          "manual probe omits an empty authorization override",
-			authorization: &emptyAuthorization,
-		},
-		{
-			name:          "manual probe sends the provided authorization value",
-			authorization: &customAuthorization,
-			wantHeader:    "Basic manual-token",
-		},
-		{
-			name:       "scheduled probe keeps the channel bearer credential",
+			name:       "default sends the probed key as the bearer token",
 			wantHeader: "Bearer channel-key",
+		},
+		{
+			name:          "the channel key wins over a configured header",
+			useAPIKey:     &useAPIKey,
+			authorization: "Basic configured-token",
+			wantHeader:    "Bearer channel-key",
+		},
+		{
+			name:          "the configured header replaces the channel key",
+			useAPIKey:     &skipAPIKey,
+			authorization: "  Basic configured-token  ",
+			wantHeader:    "Basic configured-token",
+		},
+		{
+			name:      "no header is sent without a configured value",
+			useAPIKey: &skipAPIKey,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			config := &dto.RatioProbeConfig{
+				Enabled:       true,
+				MaxGroupRatio: ratioProbeFloat(1),
+				UseAPIKey:     tt.useAPIKey,
+				Authorization: tt.authorization,
+			}
 			runner := newChannelRatioProbeRunner(context.Background())
-			decision := runner.probeKey(config, server.URL, "", "channel-key", tt.authorization)
+			decision := runner.probeKey(config, server.URL, "", "channel-key")
 
 			require.False(t, decision.failed, decision.message)
 			assert.Equal(t, tt.wantHeader, <-receivedAuthorization)

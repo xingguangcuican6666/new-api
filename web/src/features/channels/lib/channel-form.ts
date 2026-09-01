@@ -31,6 +31,7 @@ import {
   MODEL_FETCHABLE_TYPES,
   OPENAI_FIELD_PASSTHROUGH_TYPES,
   RATIO_PROBE_DEFAULT_PATH,
+  RATIO_PROBE_MAX_AUTHORIZATION_LENGTH,
   RATIO_PROBE_MAX_RATIO,
   RATIO_PROBE_SOURCE_CUSTOM,
   RATIO_PROBE_SOURCE_FOLLOW_API,
@@ -236,6 +237,7 @@ const ratioProbeSchema = z.object({
   max_group_ratio: z.string().optional(),
   min_group_ratio: z.string().optional(),
   use_api_key: z.boolean().optional(),
+  authorization: z.string().optional(),
 })
 
 export type RatioProbeBound = number | undefined
@@ -262,6 +264,19 @@ function isValidRatioProbePath(value: string | undefined): boolean {
     return false
   }
   return !trimmedValue.includes('?') && !trimmedValue.includes('#')
+}
+
+/**
+ * Mirrors relaykit/dto.validateRatioProbeAuthorization: the stored value must be
+ * usable as an HTTP header, so control characters that could inject a second
+ * header are rejected here as well.
+ */
+function isValidRatioProbeAuthorization(value: string): boolean {
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0
+    if (code !== 9 && (code < 0x20 || code > 0x7e)) return false
+  }
+  return true
 }
 
 function addRequiredIssue(
@@ -313,6 +328,17 @@ function validateRatioProbeForm(
       ctx,
       'path',
       'Ratio probe path must be an absolute path without query parameters or fragments'
+    )
+  }
+
+  const authorization = probe.authorization?.trim() || ''
+  if (authorization.length > RATIO_PROBE_MAX_AUTHORIZATION_LENGTH) {
+    addRatioProbeIssue(ctx, 'authorization', 'Authorization header is too long')
+  } else if (!isValidRatioProbeAuthorization(authorization)) {
+    addRatioProbeIssue(
+      ctx,
+      'authorization',
+      'Authorization header must use printable ASCII characters without line breaks'
     )
   }
 
@@ -668,6 +694,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
     max_group_ratio: '',
     min_group_ratio: '',
     use_api_key: true,
+    authorization: '',
   },
 }
 
@@ -682,6 +709,7 @@ type RatioProbeFormValues = {
   max_group_ratio: string
   min_group_ratio: string
   use_api_key: boolean
+  authorization: string
 }
 
 const DEFAULT_RATIO_PROBE_FORM_VALUES: RatioProbeFormValues = {
@@ -693,6 +721,7 @@ const DEFAULT_RATIO_PROBE_FORM_VALUES: RatioProbeFormValues = {
   max_group_ratio: '',
   min_group_ratio: '',
   use_api_key: true,
+  authorization: '',
 }
 
 function ratioProbeBoundToInput(value: unknown): string {
@@ -718,6 +747,8 @@ function normalizeRatioProbeFormValues(value: unknown): RatioProbeFormValues {
     max_group_ratio: ratioProbeBoundToInput(value.max_group_ratio),
     min_group_ratio: ratioProbeBoundToInput(value.min_group_ratio),
     use_api_key: value.use_api_key !== false,
+    authorization:
+      typeof value.authorization === 'string' ? value.authorization : '',
   }
 }
 
@@ -1175,6 +1206,7 @@ function applyRatioProbeSettings(
     path: probe.path?.trim() || RATIO_PROBE_DEFAULT_PATH,
     group: probe.group?.trim() || '',
     use_api_key: probe.use_api_key !== false,
+    authorization: probe.authorization?.trim() || '',
   }
 
   const maxRatio = parseRatioProbeBound(probe.max_group_ratio)

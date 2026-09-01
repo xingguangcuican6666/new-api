@@ -32,6 +32,7 @@ export const RATIO_PROBE_SOURCE_CUSTOM = 'custom'
 export const RATIO_PROBE_DEFAULT_PATH = '/api/ratio_config'
 export const RATIO_PROBE_DEFAULT_GROUP = 'default'
 export const RATIO_PROBE_MAX_RATIO = 1e6
+export const RATIO_PROBE_MAX_AUTHORIZATION_LENGTH = 8 * 1024
 export const RATIO_PROBE_STATUS_COMPLIANT = 'compliant'
 export const RATIO_PROBE_STATUS_REJECTED = 'rejected'
 export const RATIO_PROBE_STATUS_ERROR = 'error'

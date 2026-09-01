@@ -66,12 +66,8 @@ describe('ratio probe dialog', () => {
     render(<RatioProbeDialog open onOpenChange={vi.fn()} />)
 
     await waitFor(() =>
-      expect(testChannelRatioProbe).toHaveBeenCalledWith(channel.id, '')
+      expect(testChannelRatioProbe).toHaveBeenCalledWith(channel.id)
     )
-    const authorizationInput = screen.getByLabelText(
-      'Authorization header (optional)'
-    )
-    expect(authorizationInput).toHaveValue('')
     expect(screen.getByText('default')).toBeInTheDocument()
     expect(screen.getByText('Key 1')).toBeInTheDocument()
     expect(screen.getByText('Key 2')).toBeInTheDocument()
@@ -83,15 +79,7 @@ describe('ratio probe dialog', () => {
       screen.getByText('group default ratio 1.4 exceeds max 1')
     ).toBeInTheDocument()
 
-    fireEvent.change(authorizationInput, {
-      target: { value: 'Bearer manual-token' },
-    })
     fireEvent.click(screen.getByRole('button', { name: 'Test' }))
-    await waitFor(() =>
-      expect(testChannelRatioProbe).toHaveBeenLastCalledWith(
-        channel.id,
-        'Bearer manual-token'
-      )
-    )
+    await waitFor(() => expect(testChannelRatioProbe).toHaveBeenCalledTimes(2))
   })
 })

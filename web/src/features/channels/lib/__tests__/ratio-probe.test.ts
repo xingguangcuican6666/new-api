@@ -18,6 +18,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
   RATIO_PROBE_DEFAULT_PATH,
+  RATIO_PROBE_MAX_AUTHORIZATION_LENGTH,
   RATIO_PROBE_SOURCE_CUSTOM,
   RATIO_PROBE_SOURCE_FOLLOW_API,
 } from '../../constants'
@@ -138,6 +139,28 @@ describe('channel ratio probe form settings', () => {
     expect(issuePaths(invertedBounds)).toContain('ratio_probe.min_group_ratio')
   })
 
+  test('rejects an Authorization header that cannot be sent', () => {
+    const injected = channelFormSchema.safeParse(
+      probeForm({
+        enabled: true,
+        max_group_ratio: '1',
+        use_api_key: false,
+        authorization: 'Bearer token\r\nX-Injected: 1',
+      })
+    )
+    expect(issuePaths(injected)).toContain('ratio_probe.authorization')
+
+    const tooLong = channelFormSchema.safeParse(
+      probeForm({
+        enabled: true,
+        max_group_ratio: '1',
+        use_api_key: false,
+        authorization: 'a'.repeat(RATIO_PROBE_MAX_AUTHORIZATION_LENGTH + 1),
+      })
+    )
+    expect(issuePaths(tooLong)).toContain('ratio_probe.authorization')
+  })
+
   test('writes numeric bounds and drops the custom Base URL in follow mode', () => {
     const form = channelFormSchema.parse(
       probeForm({
@@ -147,6 +170,8 @@ describe('channel ratio probe form settings', () => {
         group: ' vip ',
         max_group_ratio: ' 1.2 ',
         min_group_ratio: '',
+        use_api_key: false,
+        authorization: ' Basic probe-token ',
       })
     )
     const settings = JSON.parse(
@@ -159,7 +184,8 @@ describe('channel ratio probe form settings', () => {
       base_url: '',
       path: RATIO_PROBE_DEFAULT_PATH,
       group: 'vip',
-      use_api_key: true,
+      use_api_key: false,
+      authorization: 'Basic probe-token',
       max_group_ratio: 1.2,
     })
   })
@@ -225,6 +251,7 @@ describe('channel ratio probe form settings', () => {
             group: 'vip',
             max_group_ratio: 1.5,
             use_api_key: false,
+            authorization: 'Basic probe-token',
           },
         })
       )
@@ -239,6 +266,7 @@ describe('channel ratio probe form settings', () => {
       max_group_ratio: '1.5',
       min_group_ratio: '',
       use_api_key: false,
+      authorization: 'Basic probe-token',
     })
   })
 })

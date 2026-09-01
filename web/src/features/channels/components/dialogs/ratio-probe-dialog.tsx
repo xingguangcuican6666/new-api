@@ -24,8 +24,6 @@ import { toast } from 'sonner'
 import { Dialog } from '@/components/dialog'
 import { StatusBadge, type StatusVariant } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 
 import { testChannelRatioProbe } from '../../api'
 import {
@@ -136,7 +134,6 @@ export function RatioProbeDialog(props: RatioProbeDialogProps) {
   const { t } = useTranslation()
   const { currentRow } = useChannels()
   const [isTesting, setIsTesting] = useState(false)
-  const [authorization, setAuthorization] = useState('')
   const [testData, setTestData] = useState<NonNullable<
     ChannelRatioProbeResponse['data']
   > | null>(null)
@@ -144,37 +141,31 @@ export function RatioProbeDialog(props: RatioProbeDialogProps) {
   const autoTestChannelIdRef = useRef<number | null>(null)
   const channelId = currentRow?.id
 
-  const runProbe = useCallback(
-    async (authorizationValue: string) => {
-      if (channelId == null) return
+  const runProbe = useCallback(async () => {
+    if (channelId == null) return
 
-      const requestId = ++requestIdRef.current
-      setIsTesting(true)
-      setTestData(null)
-      try {
-        const response = await testChannelRatioProbe(
-          channelId,
-          authorizationValue.trim()
-        )
-        if (requestId !== requestIdRef.current) return
-        if (!response.success || !response.data) {
-          toast.error(response.message || t('Failed to test channel'))
-          return
-        }
-        setTestData(response.data)
-      } catch (error: unknown) {
-        if (requestId !== requestIdRef.current) return
-        toast.error(
-          error instanceof Error ? error.message : t('Failed to test channel')
-        )
-      } finally {
-        if (requestId === requestIdRef.current) {
-          setIsTesting(false)
-        }
+    const requestId = ++requestIdRef.current
+    setIsTesting(true)
+    setTestData(null)
+    try {
+      const response = await testChannelRatioProbe(channelId)
+      if (requestId !== requestIdRef.current) return
+      if (!response.success || !response.data) {
+        toast.error(response.message || t('Failed to test channel'))
+        return
       }
-    },
-    [channelId, t]
-  )
+      setTestData(response.data)
+    } catch (error: unknown) {
+      if (requestId !== requestIdRef.current) return
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to test channel')
+      )
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsTesting(false)
+      }
+    }
+  }, [channelId, t])
 
   useEffect(() => {
     if (!props.open || channelId == null) {
@@ -184,8 +175,7 @@ export function RatioProbeDialog(props: RatioProbeDialogProps) {
     if (autoTestChannelIdRef.current === channelId) return
 
     autoTestChannelIdRef.current = channelId
-    setAuthorization('')
-    void runProbe('')
+    void runProbe()
   }, [channelId, props.open, runProbe])
 
   const handleClose = () => {
@@ -193,19 +183,18 @@ export function RatioProbeDialog(props: RatioProbeDialogProps) {
     autoTestChannelIdRef.current = null
     setIsTesting(false)
     setTestData(null)
-    setAuthorization('')
     props.onOpenChange(false)
   }
 
-  let resultContent: ReactNode
+  let dialogContent: ReactNode
   if (isTesting) {
-    resultContent = (
+    dialogContent = (
       <div className='flex items-center justify-center py-12'>
         <Loader2 className='text-muted-foreground size-8 animate-spin' />
       </div>
     )
   } else if (testData) {
-    resultContent = (
+    dialogContent = (
       <div className='space-y-4'>
         <div className='bg-muted/50 flex items-center justify-between gap-3 rounded-lg border p-4'>
           <div className='min-w-0'>
@@ -226,7 +215,7 @@ export function RatioProbeDialog(props: RatioProbeDialogProps) {
       </div>
     )
   } else {
-    resultContent = (
+    dialogContent = (
       <p className='text-muted-foreground py-8 text-center text-sm'>
         {t('No data')}
       </p>
@@ -254,10 +243,7 @@ export function RatioProbeDialog(props: RatioProbeDialogProps) {
           <Button variant='outline' onClick={handleClose}>
             {t('Close')}
           </Button>
-          <Button
-            onClick={() => void runProbe(authorization)}
-            disabled={isTesting}
-          >
+          <Button onClick={() => void runProbe()} disabled={isTesting}>
             {isTesting ? (
               <Loader2 className='me-2 size-4 animate-spin' />
             ) : (
@@ -268,27 +254,7 @@ export function RatioProbeDialog(props: RatioProbeDialogProps) {
         </>
       }
     >
-      <div className='space-y-4'>
-        <div className='space-y-2'>
-          <Label htmlFor='ratio-probe-authorization'>
-            {t('Authorization header (optional)')}
-          </Label>
-          <Input
-            id='ratio-probe-authorization'
-            type='password'
-            autoComplete='off'
-            placeholder={t('Bearer token or other Authorization value')}
-            value={authorization}
-            onChange={(event) => setAuthorization(event.target.value)}
-          />
-          <p className='text-muted-foreground text-xs'>
-            {t(
-              'Enter a value to send the Authorization header. Leave empty to omit it.'
-            )}
-          </p>
-        </div>
-        {resultContent}
-      </div>
+      {dialogContent}
     </Dialog>
   )
 }

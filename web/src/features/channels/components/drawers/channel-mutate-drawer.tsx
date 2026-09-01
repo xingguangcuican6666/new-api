@@ -782,6 +782,19 @@ export function ChannelMutateDrawer({
   }
   const currentRatioProbe = form.watch('ratio_probe')
   const ratioProbeEnabled = currentRatioProbe?.enabled === true
+  const ratioProbeUsesAPIKey = currentRatioProbe?.use_api_key !== false
+  let ratioProbeAuthDescription = t(
+    'Every key of a multi-key channel is probed with its own credential.'
+  )
+  if (!ratioProbeUsesAPIKey) {
+    ratioProbeAuthDescription = currentRatioProbe?.authorization?.trim()
+      ? t(
+          'One shared probe is sent with the configured Authorization header and applies to every key.'
+        )
+      : t(
+          'One shared probe is sent without an Authorization header and applies to every key.'
+        )
+  }
   const ratioProbeUsesCustomSource =
     currentRatioProbe?.source === RATIO_PROBE_SOURCE_CUSTOM
   const ratioProbeBaseURL = ratioProbeUsesCustomSource
@@ -3896,31 +3909,47 @@ export function ChannelMutateDrawer({
                               render={({ field }) => (
                                 <FormItem className='flex items-center justify-between sm:col-span-2'>
                                   <div className='space-y-0.5'>
-                                    <FormLabel>{t('Runtime auto-disable rules')}</FormLabel>
+                                    <FormLabel>
+                                      {t('Runtime auto-disable rules')}
+                                    </FormLabel>
                                     <FormDescription>
-                                      {t('Use channel-specific runtime rules instead of the global auto-disable rules')}
+                                      {t(
+                                        'Use channel-specific runtime rules instead of the global auto-disable rules'
+                                      )}
                                     </FormDescription>
                                   </div>
                                   <FormControl>
-                                    <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                    <Switch
+                                      checked={field.value === true}
+                                      onCheckedChange={field.onChange}
+                                    />
                                   </FormControl>
                                 </FormItem>
                               )}
                             />
 
-                            {form.watch('runtime_automatic_disable_override_enabled') && (
+                            {form.watch(
+                              'runtime_automatic_disable_override_enabled'
+                            ) && (
                               <>
                                 <FormField
                                   control={form.control}
                                   name='runtime_automatic_disable_status_codes'
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>{t('Runtime error status codes')}</FormLabel>
+                                      <FormLabel>
+                                        {t('Runtime error status codes')}
+                                      </FormLabel>
                                       <FormControl>
-                                        <Input placeholder='401,403,500-599' {...field} />
+                                        <Input
+                                          placeholder='401,403,500-599'
+                                          {...field}
+                                        />
                                       </FormControl>
                                       <FormDescription>
-                                        {t('Comma-separated status codes and inclusive ranges')}
+                                        {t(
+                                          'Comma-separated status codes and inclusive ranges'
+                                        )}
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -3931,12 +3960,22 @@ export function ChannelMutateDrawer({
                                   name='runtime_automatic_disable_keywords'
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>{t('Runtime error keywords')}</FormLabel>
+                                      <FormLabel>
+                                        {t('Runtime error keywords')}
+                                      </FormLabel>
                                       <FormControl>
-                                        <Textarea rows={4} placeholder={t('one keyword per line')} {...field} />
+                                        <Textarea
+                                          rows={4}
+                                          placeholder={t(
+                                            'one keyword per line'
+                                          )}
+                                          {...field}
+                                        />
                                       </FormControl>
                                       <FormDescription>
-                                        {t('A matching live relay error disables the current key for a multi-key channel, or disables the channel otherwise')}
+                                        {t(
+                                          'A matching live relay error disables the current key for a multi-key channel, or disables the channel otherwise'
+                                        )}
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -3951,19 +3990,28 @@ export function ChannelMutateDrawer({
                               render={({ field }) => (
                                 <FormItem className='flex items-center justify-between sm:col-span-2'>
                                   <div className='space-y-0.5'>
-                                    <FormLabel>{t('Empty response retry override')}</FormLabel>
+                                    <FormLabel>
+                                      {t('Empty response retry override')}
+                                    </FormLabel>
                                     <FormDescription>
-                                      {t('Decide per channel whether an upstream 200 with no output is retried, instead of following the global switch')}
+                                      {t(
+                                        'Decide per channel whether an upstream 200 with no output is retried, instead of following the global switch'
+                                      )}
                                     </FormDescription>
                                   </div>
                                   <FormControl>
-                                    <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                    <Switch
+                                      checked={field.value === true}
+                                      onCheckedChange={field.onChange}
+                                    />
                                   </FormControl>
                                 </FormItem>
                               )}
                             />
 
-                            {form.watch('empty_response_retry_override_enabled') && (
+                            {form.watch(
+                              'empty_response_retry_override_enabled'
+                            ) && (
                               <>
                                 <FormField
                                   control={form.control}
@@ -3971,13 +4019,20 @@ export function ChannelMutateDrawer({
                                   render={({ field }) => (
                                     <FormItem className='flex items-center justify-between sm:col-span-2'>
                                       <div className='space-y-0.5'>
-                                        <FormLabel>{t('Retry empty responses')}</FormLabel>
+                                        <FormLabel>
+                                          {t('Retry empty responses')}
+                                        </FormLabel>
                                         <FormDescription>
-                                          {t('Treat an upstream 200 that carries no content and no output tokens as a failure. The reply is withheld from the client and the request is retried.')}
+                                          {t(
+                                            'Treat an upstream 200 that carries no content and no output tokens as a failure. The reply is withheld from the client and the request is retried.'
+                                          )}
                                         </FormDescription>
                                       </div>
                                       <FormControl>
-                                        <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                        <Switch
+                                          checked={field.value === true}
+                                          onCheckedChange={field.onChange}
+                                        />
                                       </FormControl>
                                     </FormItem>
                                   )}
@@ -3988,13 +4043,20 @@ export function ChannelMutateDrawer({
                                   render={({ field }) => (
                                     <FormItem className='flex items-center justify-between sm:col-span-2'>
                                       <div className='space-y-0.5'>
-                                        <FormLabel>{t('Retry on the same channel')}</FormLabel>
+                                        <FormLabel>
+                                          {t('Retry on the same channel')}
+                                        </FormLabel>
                                         <FormDescription>
-                                          {t('Retry an empty response on the same channel and key until the retry limit is reached, instead of switching to another channel.')}
+                                          {t(
+                                            'Retry an empty response on the same channel and key until the retry limit is reached, instead of switching to another channel.'
+                                          )}
                                         </FormDescription>
                                       </div>
                                       <FormControl>
-                                        <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                                        <Switch
+                                          checked={field.value === true}
+                                          onCheckedChange={field.onChange}
+                                        />
                                       </FormControl>
                                     </FormItem>
                                   )}
@@ -5243,13 +5305,7 @@ export function ChannelMutateDrawer({
                                         {t('Probe with the channel API key')}
                                       </FormLabel>
                                       <FormDescription>
-                                        {field.value === false
-                                          ? t(
-                                              'One shared probe is sent without an Authorization header and applies to every key.'
-                                            )
-                                          : t(
-                                              'Every key of a multi-key channel is probed with its own credential.'
-                                            )}
+                                        {ratioProbeAuthDescription}
                                       </FormDescription>
                                     </div>
                                     <FormControl>
@@ -5263,6 +5319,37 @@ export function ChannelMutateDrawer({
                                 )}
                               />
                             </div>
+                            <FormField
+                              control={form.control}
+                              name='ratio_probe.authorization'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    {t('Authorization header (optional)')}
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type='password'
+                                      autoComplete='off'
+                                      placeholder={t(
+                                        'Bearer token or other Authorization value'
+                                      )}
+                                      disabled={
+                                        !ratioProbeEnabled ||
+                                        ratioProbeUsesAPIKey
+                                      }
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    {t(
+                                      'Used only when Probe with the channel API key is disabled. Leave empty to send no Authorization header.'
+                                    )}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
                             <FormField
                               control={form.control}
                               name='ratio_probe.source'

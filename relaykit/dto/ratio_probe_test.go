@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -89,6 +90,32 @@ func TestRatioProbeConfigValidate(t *testing.T) {
 			},
 			message: "must not exceed max group ratio",
 		},
+		{
+			name: "authorization header value",
+			config: &RatioProbeConfig{
+				Enabled:       true,
+				MaxGroupRatio: float64Pointer(1),
+				Authorization: "Basic dXNlcjpwYXNz",
+			},
+		},
+		{
+			name: "authorization with a line break",
+			config: &RatioProbeConfig{
+				Enabled:       true,
+				MaxGroupRatio: float64Pointer(1),
+				Authorization: "Bearer token\r\nX-Injected: 1",
+			},
+			message: "printable ASCII",
+		},
+		{
+			name: "authorization above the length limit",
+			config: &RatioProbeConfig{
+				Enabled:       true,
+				MaxGroupRatio: float64Pointer(1),
+				Authorization: strings.Repeat("a", MaxRatioProbeAuthorizationLength+1),
+			},
+			message: "must not exceed",
+		},
 	}
 
 	for _, tt := range tests {
@@ -113,19 +140,22 @@ func TestRatioProbeConfigNilIsInert(t *testing.T) {
 	assert.Equal(t, RatioProbeSourceFollowAPI, config.NormalizedSource())
 	assert.Equal(t, RatioProbeDefaultPath, config.NormalizedPath())
 	assert.Equal(t, RatioProbeDefaultGroup, config.NormalizedGroup())
+	assert.Equal(t, "", config.NormalizedAuthorization())
 }
 
 func TestRatioProbeConfigNormalization(t *testing.T) {
 	config := &RatioProbeConfig{
-		Source:  " CUSTOM ",
-		BaseURL: "  https://upstream.example//  ",
-		Path:    " /api/pricing ",
-		Group:   "  vip  ",
+		Source:        " CUSTOM ",
+		BaseURL:       "  https://upstream.example//  ",
+		Path:          " /api/pricing ",
+		Group:         "  vip  ",
+		Authorization: "  Bearer probe-token  ",
 	}
 	assert.Equal(t, RatioProbeSourceCustom, config.NormalizedSource())
 	assert.Equal(t, "https://upstream.example", config.NormalizedBaseURL())
 	assert.Equal(t, "/api/pricing", config.NormalizedPath())
 	assert.Equal(t, "vip", config.NormalizedGroup())
+	assert.Equal(t, "Bearer probe-token", config.NormalizedAuthorization())
 
 	useAPIKey := false
 	config.UseAPIKey = &useAPIKey

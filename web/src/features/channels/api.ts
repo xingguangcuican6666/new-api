@@ -236,16 +236,15 @@ export async function updateChannelBalance(
 }
 
 /**
- * Run a one-off upstream group ratio probe without changing channel status.
+ * Run a one-off upstream group ratio probe without changing channel status. The
+ * probe uses the credentials saved on the channel, so the result matches what the
+ * scheduled task would decide.
  */
 export async function testChannelRatioProbe(
-  id: number,
-  authorization = ''
+  id: number
 ): Promise<ChannelRatioProbeResponse> {
-  const authorizationValue = authorization.trim()
-  const res = await api.post(
+  const res = await api.get(
     `/api/channel/ratio_probe/${id}`,
-    authorizationValue ? { authorization: authorizationValue } : {},
     channelActionConfig({ disableDuplicate: true })
   )
   return res.data

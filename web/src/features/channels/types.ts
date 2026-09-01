@@ -131,6 +131,7 @@ export interface RatioProbeConfig {
   max_group_ratio?: number
   min_group_ratio?: number
   use_api_key?: boolean
+  authorization?: string
   last_probe_time?: number
   last_group_ratio?: number
   last_status?: string

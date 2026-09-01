@@ -139,6 +139,9 @@ const (
 	// MaxRatioProbeRatio bounds configured thresholds so a typo cannot turn into
 	// an effectively unbounded comparison.
 	MaxRatioProbeRatio = 1e6
+	// MaxRatioProbeAuthorizationLength bounds the stored Authorization value so a
+	// pasted blob cannot inflate the channel settings document.
+	MaxRatioProbeAuthorizationLength = 8 << 10
 	// ratioProbeEpsilon absorbs float round-trips through JSON so a threshold of
 	// 1 still accepts an upstream ratio serialized as 0.9999999999999999.
 	ratioProbeEpsilon = 1e-9
@@ -151,7 +154,8 @@ const (
 //
 // A nil UseAPIKey means "send the channel API key as the Bearer token", which is
 // the behaviour multi-key channels need: each key is probed with its own
-// credential so keys can be judged independently.
+// credential so keys can be judged independently. When UseAPIKey is false the
+// probe sends Authorization instead, so one shared request covers every key.
 type RatioProbeConfig struct {
 	Enabled       bool     `json:"enabled,omitempty"`
 	Source        string   `json:"source,omitempty"`
@@ -161,6 +165,10 @@ type RatioProbeConfig struct {
 	MaxGroupRatio *float64 `json:"max_group_ratio,omitempty"`
 	MinGroupRatio *float64 `json:"min_group_ratio,omitempty"`
 	UseAPIKey     *bool    `json:"use_api_key,omitempty"`
+	// Authorization is the complete header value (for example "Bearer xxx" or
+	// "Basic xxx") sent when the probe does not use the channel API key. An empty
+	// value sends no Authorization header at all.
+	Authorization string `json:"authorization,omitempty"`
 
 	// Probe state written by the scheduled task and rendered read-only in the
 	// channel editor.
@@ -220,6 +228,16 @@ func (c *RatioProbeConfig) UsesAPIKey() bool {
 	return c == nil || c.UseAPIKey == nil || *c.UseAPIKey
 }
 
+// NormalizedAuthorization returns the configured Authorization header value. It
+// is only sent when the probe does not use the channel API key, mirroring
+// BillingQueryConfig.BearerToken.
+func (c *RatioProbeConfig) NormalizedAuthorization() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.Authorization)
+}
+
 // Accepts reports whether an upstream group ratio satisfies the configured
 // bounds. Both bounds are inclusive.
 func (c *RatioProbeConfig) Accepts(ratio float64) bool {
@@ -273,6 +291,24 @@ func (c *RatioProbeConfig) Validate() error {
 	}
 	if c.MaxGroupRatio != nil && c.MinGroupRatio != nil && *c.MinGroupRatio > *c.MaxGroupRatio {
 		return fmt.Errorf("ratio probe min group ratio must not exceed max group ratio")
+	}
+	return validateRatioProbeAuthorization(c.NormalizedAuthorization())
+}
+
+// validateRatioProbeAuthorization keeps a configured header value usable and
+// harmless: bounded in length and free of control characters, so a saved channel
+// setting can never inject extra request headers into the probe.
+func validateRatioProbeAuthorization(authorization string) error {
+	if authorization == "" {
+		return nil
+	}
+	if len(authorization) > MaxRatioProbeAuthorizationLength {
+		return fmt.Errorf("ratio probe authorization must not exceed %d characters", MaxRatioProbeAuthorizationLength)
+	}
+	for i := 0; i < len(authorization); i++ {
+		if character := authorization[i]; character != '\t' && (character < 0x20 || character > 0x7e) {
+			return fmt.Errorf("ratio probe authorization must contain printable ASCII characters only")
+		}
 	}
 	return nil
 }
