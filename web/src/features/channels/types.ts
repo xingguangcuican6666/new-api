@@ -236,6 +236,23 @@ export interface ChannelBalanceResponse {
   raw_response?: string
 }
 
+export interface ChannelRatioProbeResult {
+  key_index?: number
+  status: string
+  ratio?: number
+  message?: string
+}
+
+export interface ChannelRatioProbeResponse {
+  success: boolean
+  message?: string
+  data?: {
+    group: string
+    configured: boolean
+    results: ChannelRatioProbeResult[]
+  }
+}
+
 export interface FetchModelsResponse {
   success: boolean
   message?: string

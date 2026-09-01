@@ -35,6 +35,7 @@ export const RATIO_PROBE_MAX_RATIO = 1e6
 export const RATIO_PROBE_STATUS_COMPLIANT = 'compliant'
 export const RATIO_PROBE_STATUS_REJECTED = 'rejected'
 export const RATIO_PROBE_STATUS_ERROR = 'error'
+export const RATIO_PROBE_STATUS_UNCONFIGURED = 'unconfigured'
 
 export const CHANNEL_TYPES = {
   0: 'Unknown',

@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -68,8 +70,16 @@ func newChannelRatioProbeRunner(ctx context.Context) *channelRatioProbeRunner {
 }
 
 func buildChannelRatioProbeURL(channel *model.Channel, config *dto.RatioProbeConfig) (string, error) {
+	source := ""
+	if config != nil {
+		source = strings.ToLower(strings.TrimSpace(config.Source))
+	}
+	if source != "" && source != dto.RatioProbeSourceFollowAPI && source != dto.RatioProbeSourceCustom {
+		return "", fmt.Errorf("invalid ratio probe source: %s", config.Source)
+	}
+
 	baseURL := config.NormalizedBaseURL()
-	if config.NormalizedSource() == dto.RatioProbeSourceFollowAPI {
+	if source != dto.RatioProbeSourceCustom {
 		baseURL = strings.TrimRight(strings.TrimSpace(channel.GetBaseURL()), "/")
 	}
 	if baseURL == "" {
@@ -78,7 +88,14 @@ func buildChannelRatioProbeURL(channel *model.Channel, config *dto.RatioProbeCon
 	if err := dto.ValidateRatioProbeBaseURL(baseURL); err != nil {
 		return "", err
 	}
-	return baseURL + config.NormalizedPath(), nil
+	path := config.NormalizedPath()
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		return "", errors.New("ratio probe path must be an absolute path starting with /")
+	}
+	if strings.ContainsAny(path, "?#") {
+		return "", errors.New("ratio probe path must not contain query parameters or fragments")
+	}
+	return baseURL + path, nil
 }
 
 func describeRatioProbeRejection(config *dto.RatioProbeConfig, ratio float64) string {
@@ -166,6 +183,113 @@ func fetchUpstreamGroupRatios(ctx context.Context, requestURL string, credential
 		return nil, fmt.Errorf("ratio config response exceeds %d bytes", channelRatioProbeMaxResponseBytes)
 	}
 	return parseUpstreamGroupRatios(body)
+}
+
+type channelRatioProbeTestResult struct {
+	KeyIndex *int     `json:"key_index,omitempty"`
+	Status   string   `json:"status"`
+	Ratio    *float64 `json:"ratio,omitempty"`
+	Message  string   `json:"message,omitempty"`
+}
+
+type channelRatioProbeTestData struct {
+	Group      string                        `json:"group"`
+	Configured bool                          `json:"configured"`
+	Results    []channelRatioProbeTestResult `json:"results"`
+}
+
+func buildChannelRatioProbeTestResults(channel *model.Channel, config *dto.RatioProbeConfig, decisions []ratioProbeDecision) []channelRatioProbeTestResult {
+	keyIndexes := make(map[string]int)
+	if channel.ChannelInfo.IsMultiKey {
+		for index, key := range channel.GetKeys() {
+			keyIndexes[strings.TrimSpace(key)] = index + 1
+		}
+	}
+
+	results := make([]channelRatioProbeTestResult, 0, len(decisions))
+	for _, decision := range decisions {
+		status := dto.RatioProbeStatusError
+		if !decision.failed {
+			status = dto.RatioProbeStatusRejected
+			if !config.IsEnabled() {
+				status = dto.RatioProbeStatusUnconfigured
+			} else if decision.compliant {
+				status = dto.RatioProbeStatusCompliant
+			}
+		}
+
+		result := channelRatioProbeTestResult{
+			Status:  status,
+			Message: decision.message,
+		}
+		if !decision.failed {
+			ratio := decision.ratio
+			result.Ratio = &ratio
+		}
+		if channel.ChannelInfo.IsMultiKey {
+			if index, ok := keyIndexes[strings.TrimSpace(decision.key)]; ok {
+				result.KeyIndex = &index
+			}
+		}
+		results = append(results, result)
+	}
+	return results
+}
+
+// TestChannelRatioProbe performs a one-off, read-only ratio probe for the
+// selected channel. Unlike the scheduled task, it never changes channel or key
+// status and returns every credential result for multi-key channels.
+func TestChannelRatioProbe(c *gin.Context) {
+	channelID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	channel, err := model.CacheGetChannel(channelID)
+	if err != nil {
+		channel, err = model.GetChannelById(channelID, true)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
+
+	config := channel.GetOtherSettings().RatioProbe
+	if err := config.Validate(); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	requestURL, err := buildChannelRatioProbeURL(channel, config)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	requestCtx := context.Background()
+	if c.Request != nil {
+		requestCtx = c.Request.Context()
+	}
+	runner := newChannelRatioProbeRunner(requestCtx)
+	decisions := runner.collectChannelRatioProbeDecisions(channel, config, requestURL)
+	if len(decisions) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "ratio probe produced no result",
+		})
+		return
+	}
+
+	results := buildChannelRatioProbeTestResults(channel, config, decisions)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": channelRatioProbeTestData{
+			Group:      config.NormalizedGroup(),
+			Configured: config.IsEnabled(),
+			Results:    results,
+		},
+	})
 }
 
 // parseUpstreamGroupRatios reads the group ratio table out of an upstream

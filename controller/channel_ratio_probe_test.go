@@ -136,6 +136,55 @@ func TestBuildChannelRatioProbeURL(t *testing.T) {
 	}
 }
 
+func TestBuildChannelRatioProbeTestResults(t *testing.T) {
+	channel := &model.Channel{
+		Key: "sk-a\nsk-b",
+		ChannelInfo: model.ChannelInfo{
+			IsMultiKey: true,
+		},
+	}
+	config := &dto.RatioProbeConfig{
+		Enabled:       true,
+		MaxGroupRatio: ratioProbeFloat(1),
+	}
+
+	results := buildChannelRatioProbeTestResults(channel, config, []ratioProbeDecision{
+		{key: "sk-a", compliant: true, ratio: 0.8},
+		{key: "sk-b", ratio: 1.2, message: "group default ratio 1.2 exceeds max 1"},
+		{key: "sk-c", failed: true, message: "status code: 502"},
+	})
+
+	require.Len(t, results, 3)
+	assert.Equal(t, dto.RatioProbeStatusCompliant, results[0].Status)
+	require.NotNil(t, results[0].KeyIndex)
+	assert.Equal(t, 1, *results[0].KeyIndex)
+	require.NotNil(t, results[0].Ratio)
+	assert.Equal(t, 0.8, *results[0].Ratio)
+
+	assert.Equal(t, dto.RatioProbeStatusRejected, results[1].Status)
+	require.NotNil(t, results[1].KeyIndex)
+	assert.Equal(t, 2, *results[1].KeyIndex)
+	assert.Equal(t, "group default ratio 1.2 exceeds max 1", results[1].Message)
+
+	assert.Equal(t, dto.RatioProbeStatusError, results[2].Status)
+	assert.Nil(t, results[2].Ratio)
+	assert.Nil(t, results[2].KeyIndex)
+}
+
+func TestBuildChannelRatioProbeTestResultsMarksDisabledProbeUnconfigured(t *testing.T) {
+	channel := &model.Channel{Key: "sk-a"}
+	config := &dto.RatioProbeConfig{}
+
+	results := buildChannelRatioProbeTestResults(channel, config, []ratioProbeDecision{
+		{key: "sk-a", compliant: true, ratio: 1},
+	})
+
+	require.Len(t, results, 1)
+	assert.Equal(t, dto.RatioProbeStatusUnconfigured, results[0].Status)
+	require.NotNil(t, results[0].Ratio)
+	assert.Equal(t, 1.0, *results[0].Ratio)
+}
+
 func ratioProbeStringPointer(value string) *string {
 	return &value
 }

@@ -131,9 +131,10 @@ const (
 	RatioProbeDefaultPath  = "/api/ratio_config"
 	RatioProbeDefaultGroup = "default"
 
-	RatioProbeStatusCompliant = "compliant"
-	RatioProbeStatusRejected  = "rejected"
-	RatioProbeStatusError     = "error"
+	RatioProbeStatusCompliant    = "compliant"
+	RatioProbeStatusRejected     = "rejected"
+	RatioProbeStatusError        = "error"
+	RatioProbeStatusUnconfigured = "unconfigured"
 
 	// MaxRatioProbeRatio bounds configured thresholds so a typo cannot turn into
 	// an effectively unbounded comparison.

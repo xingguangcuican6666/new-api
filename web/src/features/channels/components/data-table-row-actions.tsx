@@ -33,6 +33,7 @@ import {
   Trash2,
   RefreshCw,
   Loader2,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -121,6 +122,11 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const handleQueryBalance = () => {
     setCurrentRow(channel)
     setOpen('balance-query')
+  }
+
+  const handleRatioProbe = () => {
+    setCurrentRow(channel)
+    setOpen('ratio-probe')
   }
 
   const handleFetchModels = () => {
@@ -286,6 +292,14 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             {t('Query Balance')}
             <DropdownMenuShortcut>
               <DollarSign size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+
+          {/* Test Upstream Ratio */}
+          <DropdownMenuItem onClick={handleRatioProbe}>
+            {t('Upstream Ratio Probe Test')}
+            <DropdownMenuShortcut>
+              <SlidersHorizontal size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 

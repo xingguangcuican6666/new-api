@@ -26,6 +26,7 @@ import type {
   Channel,
   ChannelBalanceResponse,
   ChannelOpsResponse,
+  ChannelRatioProbeResponse,
   ChannelTestResponse,
   CopyChannelParams,
   CopyChannelResponse,
@@ -230,6 +231,19 @@ export async function updateChannelBalance(
   const res = await api.get(
     `/api/channel/update_balance/${id}`,
     channelActionConfig()
+  )
+  return res.data
+}
+
+/**
+ * Run a one-off upstream group ratio probe without changing channel status.
+ */
+export async function testChannelRatioProbe(
+  id: number
+): Promise<ChannelRatioProbeResponse> {
+  const res = await api.get(
+    `/api/channel/ratio_probe/${id}`,
+    channelActionConfig({ disableDuplicate: true })
   )
   return res.data
 }

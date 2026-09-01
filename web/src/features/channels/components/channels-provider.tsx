@@ -39,6 +39,7 @@ type DialogType =
   | 'update-channel'
   | 'test-channel'
   | 'balance-query'
+  | 'ratio-probe'
   | 'fetch-models'
   | 'ollama-models'
   | 'multi-key-manage'
