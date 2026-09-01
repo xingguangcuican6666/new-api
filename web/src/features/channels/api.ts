@@ -239,10 +239,13 @@ export async function updateChannelBalance(
  * Run a one-off upstream group ratio probe without changing channel status.
  */
 export async function testChannelRatioProbe(
-  id: number
+  id: number,
+  authorization = ''
 ): Promise<ChannelRatioProbeResponse> {
-  const res = await api.get(
+  const authorizationValue = authorization.trim()
+  const res = await api.post(
     `/api/channel/ratio_probe/${id}`,
+    authorizationValue ? { authorization: authorizationValue } : {},
     channelActionConfig({ disableDuplicate: true })
   )
   return res.data

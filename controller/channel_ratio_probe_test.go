@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -183,6 +186,52 @@ func TestBuildChannelRatioProbeTestResultsMarksDisabledProbeUnconfigured(t *test
 	assert.Equal(t, dto.RatioProbeStatusUnconfigured, results[0].Status)
 	require.NotNil(t, results[0].Ratio)
 	assert.Equal(t, 1.0, *results[0].Ratio)
+}
+
+func TestChannelRatioProbeAuthorizationOverride(t *testing.T) {
+	receivedAuthorization := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		receivedAuthorization <- request.Header.Get("Authorization")
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"group_ratio":{"default":1}}`))
+	}))
+	defer server.Close()
+
+	config := &dto.RatioProbeConfig{
+		Enabled:       true,
+		MaxGroupRatio: ratioProbeFloat(1),
+	}
+	emptyAuthorization := ""
+	customAuthorization := "Basic manual-token"
+	tests := []struct {
+		name          string
+		authorization *string
+		wantHeader    string
+	}{
+		{
+			name:          "manual probe omits an empty authorization override",
+			authorization: &emptyAuthorization,
+		},
+		{
+			name:          "manual probe sends the provided authorization value",
+			authorization: &customAuthorization,
+			wantHeader:    "Basic manual-token",
+		},
+		{
+			name:       "scheduled probe keeps the channel bearer credential",
+			wantHeader: "Bearer channel-key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := newChannelRatioProbeRunner(context.Background())
+			decision := runner.probeKey(config, server.URL, "", "channel-key", tt.authorization)
+
+			require.False(t, decision.failed, decision.message)
+			assert.Equal(t, tt.wantHeader, <-receivedAuthorization)
+		})
+	}
 }
 
 func ratioProbeStringPointer(value string) *string {
