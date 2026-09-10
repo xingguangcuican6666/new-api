@@ -1086,7 +1086,8 @@ export function ChannelMutateDrawer({
     form.watch('runtime_automatic_disable_override_enabled') ||
     form.watch('runtime_automatic_disable_status_codes')?.trim() ||
     form.watch('runtime_automatic_disable_keywords')?.trim() ||
-    form.watch('empty_response_retry_override_enabled')
+    form.watch('empty_response_retry_override_enabled') ||
+    form.watch('automatic_retry_override_enabled')
   )
   const internalNotesConfigured = Boolean(
     currentTag?.trim() || currentRemark?.trim()
@@ -3986,7 +3987,29 @@ export function ChannelMutateDrawer({
 
                             <FormField
                               control={form.control}
-                              name='empty_response_retry_override_enabled'
+                              name='automatic_retry_override_enabled'
+                              render={({ field }) => (
+                                <FormItem className='flex items-center justify-between sm:col-span-2'>
+                                  <div className='space-y-0.5'>
+                                    <FormLabel>{t('Channel forced retry rules')}</FormLabel>
+                                    <FormDescription>{t('Retry matching upstream errors before returning an error to the client')}</FormDescription>
+                                  </div>
+                                  <FormControl><Switch checked={field.value === true} onCheckedChange={field.onChange} /></FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            {form.watch('automatic_retry_override_enabled') && (
+                              <>
+                                <FormField control={form.control} name='automatic_retry_status_codes' render={({ field }) => (
+                                  <FormItem><FormLabel>{t('Forced retry status codes')}</FormLabel><FormControl><Input placeholder='401,429,500-599' {...field} /></FormControl><FormDescription>{t('Comma-separated status codes and inclusive ranges')}</FormDescription><FormMessage /></FormItem>
+                                )} />
+                                <FormField control={form.control} name='automatic_retry_keywords' render={({ field }) => (
+                                  <FormItem><FormLabel>{t('Forced retry keywords')}</FormLabel><FormControl><Textarea rows={4} placeholder={t('one keyword per line')} {...field} /></FormControl><FormDescription>{t('When both status codes and keywords are set, both must match')}</FormDescription><FormMessage /></FormItem>
+                                )} />
+                              </>
+                            )}
+
+
                               render={({ field }) => (
                                 <FormItem className='flex items-center justify-between sm:col-span-2'>
                                   <div className='space-y-0.5'>

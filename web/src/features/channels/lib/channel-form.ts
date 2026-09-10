@@ -396,6 +396,9 @@ export const channelFormSchema = z
     empty_response_retry_override_enabled: z.boolean().optional(),
     empty_response_retry_enabled: z.boolean().optional(),
     empty_response_retry_in_place: z.boolean().optional(),
+    automatic_retry_override_enabled: z.boolean().optional(),
+    automatic_retry_status_codes: z.string().optional(),
+    automatic_retry_keywords: z.string().optional(),
     status: z.number(),
     status_code_mapping: z
       .string()
@@ -638,6 +641,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   empty_response_retry_override_enabled: false,
   empty_response_retry_enabled: false,
   empty_response_retry_in_place: true,
+  automatic_retry_override_enabled: false,
+  automatic_retry_status_codes: '',
+  automatic_retry_keywords: '',
   status: CHANNEL_STATUS.ENABLED,
   status_code_mapping: '',
   tag: '',
@@ -1044,7 +1050,15 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     delete settingsObj.empty_response_retry_in_place
   }
 
-  // Add azure_responses_version for Azure channels (type 3)
+  if (formData.automatic_retry_override_enabled === true) {
+    settingsObj.automatic_retry_override_enabled = true
+    settingsObj.automatic_retry_status_codes = formData.automatic_retry_status_codes?.trim() || ''
+    settingsObj.automatic_retry_keywords = formData.automatic_retry_keywords?.trim() || ''
+  } else {
+    delete settingsObj.automatic_retry_override_enabled
+    delete settingsObj.automatic_retry_status_codes
+    delete settingsObj.automatic_retry_keywords
+  }
   if (formData.type === 3 && formData.azure_responses_version) {
     settingsObj.azure_responses_version = formData.azure_responses_version
   } else if ('azure_responses_version' in settingsObj) {

@@ -355,6 +355,12 @@ type ChannelOtherSettings struct {
 	// EmptyResponseRetryInPlace keeps the retry on this channel instead of moving
 	// to the next candidate.
 	EmptyResponseRetryInPlace bool `json:"empty_response_retry_in_place,omitempty"`
+	// AutomaticRetryOverrideEnabled enables channel-specific forced retry rules.
+	AutomaticRetryOverrideEnabled bool `json:"automatic_retry_override_enabled,omitempty"`
+	// AutomaticRetryStatusCodes contains comma-separated HTTP status codes/ranges.
+	AutomaticRetryStatusCodes string `json:"automatic_retry_status_codes,omitempty"`
+	// AutomaticRetryKeywords contains one case-insensitive keyword per line.
+	AutomaticRetryKeywords string `json:"automatic_retry_keywords,omitempty"`
 	// Deprecated names retained so settings saved by the previous implementation remain readable.
 	AutomaticDisableOverrideEnabled       bool                  `json:"automatic_disable_override_enabled,omitempty"`
 	AutomaticDisableStatusCodes           string                `json:"automatic_disable_status_codes,omitempty"`

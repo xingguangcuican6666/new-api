@@ -250,7 +250,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		retrySameChannel = types.IsEmptyResponseRetryError(newAPIError) && helper.EmptyResponseRetryInPlaceEnabled(relayInfo)
 
-		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
+		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry(), &channelSettings) {
 			break
 		}
 	}
@@ -340,18 +340,12 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	return channel, nil
 }
 
-func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
-	if openaiErr == nil {
-		return false
-	}
-	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int, channelSettings *dto.ChannelOtherSettings) bool {
+	if openaiErr == nil || service.ShouldSkipRetryAfterChannelAffinityFailure(c) || types.IsSkipRetryError(openaiErr) {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {
-		return true
-	}
-	if types.IsSkipRetryError(openaiErr) {
-		return false
+		return retryTimes > 0
 	}
 	if retryTimes <= 0 {
 		return false
@@ -359,9 +353,10 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
+	if service.ShouldRetryChannelError(openaiErr, channelSettings) {
+		return true
+	}
 	if types.IsEmptyResponseRetryError(openaiErr) {
-		// Nothing reached the client, and retrying is the whole point of the
-		// empty-response switch, so it does not go through the status code rules.
 		return true
 	}
 	code := openaiErr.StatusCode
