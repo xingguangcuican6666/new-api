@@ -76,6 +76,22 @@ func splitChannelKeywords(value string) []string {
 	return keywords
 }
 
+func matchesChannelDisableRule(err *types.NewAPIError, statusCodeRanges []operation_setting.StatusCodeRange, keywords []string) bool {
+	if len(statusCodeRanges) == 0 && len(keywords) == 0 {
+		return false
+	}
+	if len(statusCodeRanges) > 0 && !operation_setting.ShouldDisableByStatusCodeRanges(statusCodeRanges, err.StatusCode) {
+		return false
+	}
+	if len(keywords) > 0 {
+		matched, _ := AcSearch(strings.ToLower(err.Error()), keywords, true)
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
 func ShouldRuntimeDisableChannel(err *types.NewAPIError, channelSettings *dto.ChannelOtherSettings) bool {
 	if !common.RuntimeAutomaticDisableChannelEnabled {
 		return false
@@ -106,13 +122,7 @@ func ShouldRuntimeDisableChannel(err *types.NewAPIError, channelSettings *dto.Ch
 			}
 		}
 	}
-	if operation_setting.ShouldDisableByStatusCodeRanges(statusCodeRanges, err.StatusCode) {
-		return true
-	}
-
-	lowerMessage := strings.ToLower(err.Error())
-	search, _ := AcSearch(lowerMessage, keywords, true)
-	return search
+	return matchesChannelDisableRule(err, statusCodeRanges, keywords)
 }
 
 func ShouldDisableChannel(err *types.NewAPIError, channelSettings *dto.ChannelOtherSettings) bool {
@@ -130,28 +140,26 @@ func ShouldDisableChannel(err *types.NewAPIError, channelSettings *dto.ChannelOt
 	}
 	statusCodeRanges := operation_setting.AutomaticDisableStatusCodeRanges
 	keywords := operation_setting.AutomaticDisableKeywords
-	if channelSettings != nil && channelSettings.AutomaticDisableOverrideEnabled {
-		var parseErr error
-		statusCodeRanges, parseErr = operation_setting.ParseHTTPStatusCodeRanges(channelSettings.AutomaticDisableStatusCodes)
-		if parseErr != nil {
-			common.SysLog(fmt.Sprintf("invalid automatic disable status codes in channel override: %v", parseErr))
-			return false
+	if channelSettings != nil {
+		overrideEnabled := channelSettings.RuntimeAutomaticDisableOverrideEnabled
+		statusCodes := channelSettings.RuntimeAutomaticDisableStatusCodes
+		keywordText := channelSettings.RuntimeAutomaticDisableKeywords
+		if !overrideEnabled && channelSettings.AutomaticDisableOverrideEnabled {
+			overrideEnabled = true
+			statusCodes = channelSettings.AutomaticDisableStatusCodes
+			keywordText = channelSettings.AutomaticDisableKeywords
 		}
-		keywords = make([]string, 0)
-		for _, keyword := range strings.Split(channelSettings.AutomaticDisableKeywords, "\n") {
-			keyword = strings.ToLower(strings.TrimSpace(keyword))
-			if keyword != "" {
-				keywords = append(keywords, keyword)
+		if overrideEnabled {
+			var parseErr error
+			statusCodeRanges, parseErr = operation_setting.ParseHTTPStatusCodeRanges(statusCodes)
+			if parseErr != nil {
+				common.SysLog(fmt.Sprintf("invalid automatic disable status codes in channel override: %v", parseErr))
+				return false
 			}
+			keywords = splitChannelKeywords(keywordText)
 		}
 	}
-	if operation_setting.ShouldDisableByStatusCodeRanges(statusCodeRanges, err.StatusCode) {
-		return true
-	}
-
-	lowerMessage := strings.ToLower(err.Error())
-	search, _ := AcSearch(lowerMessage, keywords, true)
-	return search
+	return matchesChannelDisableRule(err, statusCodeRanges, keywords)
 }
 
 func ShouldEnableChannel(newAPIError *types.NewAPIError, status int) bool {

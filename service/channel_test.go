@@ -33,8 +33,9 @@ func TestShouldRuntimeDisableChannelUsesChannelOverrideAsCompleteReplacement(t *
 	}
 
 	require.False(t, ShouldRuntimeDisableChannel(types.NewOpenAIError(errors.New("global balance error"), types.ErrorCodeBadResponseStatusCode, http.StatusForbidden), &override))
-	require.True(t, ShouldRuntimeDisableChannel(types.NewOpenAIError(errors.New("CHANNEL BALANCE ERROR"), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest), &override))
-	require.True(t, ShouldRuntimeDisableChannel(types.NewOpenAIError(errors.New("rate limited"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests), &override))
+	require.False(t, ShouldRuntimeDisableChannel(types.NewOpenAIError(errors.New("CHANNEL BALANCE ERROR"), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest), &override))
+	require.False(t, ShouldRuntimeDisableChannel(types.NewOpenAIError(errors.New("rate limited"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests), &override))
+	require.True(t, ShouldRuntimeDisableChannel(types.NewOpenAIError(errors.New("CHANNEL BALANCE ERROR"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests), &override))
 }
 
 func TestShouldDisableChannelUsesChannelOverrideAsCompleteReplacement(t *testing.T) {
@@ -57,8 +58,32 @@ func TestShouldDisableChannelUsesChannelOverrideAsCompleteReplacement(t *testing
 	}
 
 	require.False(t, ShouldDisableChannel(types.NewOpenAIError(errors.New("global balance error"), types.ErrorCodeBadResponseStatusCode, http.StatusForbidden), &override))
-	require.True(t, ShouldDisableChannel(types.NewOpenAIError(errors.New("CHANNEL BALANCE ERROR"), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest), &override))
-	require.True(t, ShouldDisableChannel(types.NewOpenAIError(errors.New("rate limited"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests), &override))
+	require.False(t, ShouldDisableChannel(types.NewOpenAIError(errors.New("CHANNEL BALANCE ERROR"), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest), &override))
+	require.False(t, ShouldDisableChannel(types.NewOpenAIError(errors.New("rate limited"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests), &override))
+	require.True(t, ShouldDisableChannel(types.NewOpenAIError(errors.New("CHANNEL BALANCE ERROR"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests), &override))
+}
+
+func TestShouldDisableChannelHonorsRuntimeOverrideFields(t *testing.T) {
+	originalEnabled := common.AutomaticDisableChannelEnabled
+	originalRanges := operation_setting.AutomaticDisableStatusCodeRanges
+	originalKeywords := operation_setting.AutomaticDisableKeywords
+	t.Cleanup(func() {
+		common.AutomaticDisableChannelEnabled = originalEnabled
+		operation_setting.AutomaticDisableStatusCodeRanges = originalRanges
+		operation_setting.AutomaticDisableKeywords = originalKeywords
+	})
+
+	common.AutomaticDisableChannelEnabled = true
+	operation_setting.AutomaticDisableStatusCodeRanges = []operation_setting.StatusCodeRange{{Start: 401, End: 403}}
+	operation_setting.AutomaticDisableKeywords = []string{"global balance error"}
+	override := dto.ChannelOtherSettings{
+		RuntimeAutomaticDisableOverrideEnabled: true,
+		RuntimeAutomaticDisableStatusCodes:     "429",
+		RuntimeAutomaticDisableKeywords:        "channel balance error",
+	}
+
+	require.False(t, ShouldDisableChannel(types.NewOpenAIError(errors.New("global balance error"), types.ErrorCodeBadResponseStatusCode, http.StatusForbidden), &override))
+	require.True(t, ShouldDisableChannel(types.NewOpenAIError(errors.New("CHANNEL BALANCE ERROR"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests), &override))
 }
 
 func TestShouldDisableChannelDefaultsIncludeForbidden(t *testing.T) {
@@ -103,8 +128,14 @@ func TestShouldRuntimeDisableChannelOverrideOnlyDisablesMatchingRuntimeErrors(t 
 	)
 
 	assert.False(t, ShouldRuntimeDisableChannel(unmatchedChannelError, &override))
-	assert.True(t, ShouldRuntimeDisableChannel(matchedStatus, &override))
-	assert.True(t, ShouldRuntimeDisableChannel(matchedKeyword, &override))
+	assert.False(t, ShouldRuntimeDisableChannel(matchedStatus, &override))
+	assert.False(t, ShouldRuntimeDisableChannel(matchedKeyword, &override))
+	matchedBoth := types.NewOpenAIError(
+		errors.New("ACCOUNT SUSPENDED by provider"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusForbidden,
+	)
+	assert.True(t, ShouldRuntimeDisableChannel(matchedBoth, &override))
 }
 
 func TestShouldRuntimeDisableChannelGlobalRulesDoNotDisableUnmatchedChannelErrors(t *testing.T) {
