@@ -4117,7 +4117,9 @@ export function ChannelMutateDrawer({
                               </>
                             )}
 
-
+                            <FormField
+                              control={form.control}
+                              name='empty_response_retry_override_enabled'
                               render={({ field }) => (
                                 <FormItem className='flex items-center justify-between sm:col-span-2'>
                                   <div className='space-y-0.5'>
