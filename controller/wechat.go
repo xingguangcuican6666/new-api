@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -98,7 +99,12 @@ func WeChatAuth(c *gin.Context) {
 			user.Role = common.RoleCommonUser
 			user.Status = common.UserStatusEnabled
 
-			if err := user.Insert(0); err != nil {
+			if err := user.InsertForRegistration(0); err != nil {
+				if errors.Is(err, setting.ErrRegistrationGroupUnavailable) {
+					common.SysError("registration group configuration rejected WeChat registration: " + err.Error())
+					common.ApiErrorMsg(c, "用户注册失败")
+					return
+				}
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
 					"message": err.Error(),

@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -683,29 +684,48 @@ func ensureEmailAvailableWithTx(tx *gorm.DB, email string, excludeUserID int) er
 }
 
 func (user *User) Insert(inviterId int) error {
+	return user.insert(inviterId, false)
+}
+
+func (user *User) InsertForRegistration(inviterId int) error {
+	return user.insert(inviterId, true)
+}
+
+func (user *User) insert(inviterId int, registration bool) error {
 	if err := DB.Transaction(func(tx *gorm.DB) error {
-		return withNormalizedEmailLock(tx, user.Email, func(tx *gorm.DB) error {
-			if err := user.prepareForInsert(tx); err != nil {
-				return err
-			}
-			user.Quota = common.QuotaForNewUser
-			user.AffCode = common.GetRandomString(4)
-
-			// 初始化用户设置，包括默认的边栏配置
-			if user.Setting == "" {
-				defaultSetting := dto.UserSetting{}
-				// 这里暂时不设置SidebarModules，因为需要在用户创建后根据角色设置
-				user.SetSetting(defaultSetting)
-			}
-
-			return tx.Create(user).Error
-		})
+		return user.insertWithTx(tx, registration)
 	}); err != nil {
 		return err
 	}
 
 	user.finishInsert(inviterId)
 	return nil
+}
+
+func (user *User) insertWithTx(tx *gorm.DB, registration bool) error {
+	return withNormalizedEmailLock(tx, user.Email, func(tx *gorm.DB) error {
+		if registration {
+			group, err := setting.ResolveRegistrationGroup(user.Group)
+			if err != nil {
+				return err
+			}
+			user.Group = group
+		}
+		if err := user.prepareForInsert(tx); err != nil {
+			return err
+		}
+		user.Quota = common.QuotaForNewUser
+		user.AffCode = common.GetRandomString(4)
+
+		// 初始化用户设置，包括默认的边栏配置
+		if user.Setting == "" {
+			defaultSetting := dto.UserSetting{}
+			// 这里暂时不设置SidebarModules，因为需要在用户创建后根据角色设置
+			user.SetSetting(defaultSetting)
+		}
+
+		return tx.Create(user).Error
+	})
 }
 
 func (user *User) finishInsert(inviterId int) {
@@ -748,21 +768,11 @@ func (user *User) FinishInsert(inviterId int) {
 // This is used for OAuth registration where user creation and binding need to be atomic.
 // Post-creation tasks (sidebar config, logs, inviter rewards) are handled after the transaction commits.
 func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
-	return withNormalizedEmailLock(tx, user.Email, func(tx *gorm.DB) error {
-		if err := user.prepareForInsert(tx); err != nil {
-			return err
-		}
-		user.Quota = common.QuotaForNewUser
-		user.AffCode = common.GetRandomString(4)
+	return user.insertWithTx(tx, false)
+}
 
-		// 初始化用户设置
-		if user.Setting == "" {
-			defaultSetting := dto.UserSetting{}
-			user.SetSetting(defaultSetting)
-		}
-
-		return tx.Create(user).Error
-	})
+func (user *User) InsertForRegistrationWithTx(tx *gorm.DB, inviterId int) error {
+	return user.insertWithTx(tx, true)
 }
 
 // FinalizeOAuthUserCreation performs post-transaction tasks for OAuth user creation.

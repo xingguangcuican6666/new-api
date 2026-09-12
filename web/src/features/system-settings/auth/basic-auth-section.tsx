@@ -17,11 +17,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
 
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
+import { LoadingState } from '@/components/loading-state'
+import { Combobox } from '@/components/ui/combobox'
+import type { ComboboxInputOption } from '@/components/ui/combobox-input'
 import {
   Form,
   FormControl,
@@ -33,6 +39,8 @@ import {
 } from '@/components/ui/form'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { getGroups } from '@/features/users/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import {
   SettingsForm,
@@ -49,6 +57,7 @@ const basicAuthSchema = z.object({
   PasswordRegisterEnabled: z.boolean(),
   EmailVerificationEnabled: z.boolean(),
   RegisterEnabled: z.boolean(),
+  DefaultRegistrationGroup: z.string().min(1),
   EmailDomainRestrictionEnabled: z.boolean(),
   EmailAliasRestrictionEnabled: z.boolean(),
   EmailDomainWhitelist: z.string(),
@@ -63,6 +72,37 @@ type BasicAuthSectionProps = {
 export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
+  const groupsQuery = useQuery({
+    queryKey: ['groups'],
+    queryFn: async () => requireServerSuccess(await getGroups()),
+    staleTime: 5 * 60 * 1000,
+  })
+  const groupOptions = useMemo<ComboboxInputOption[]>(() => {
+    const groups = [...(groupsQuery.data?.data ?? [])].sort((a, b) =>
+      a.localeCompare(b)
+    )
+    const options: ComboboxInputOption[] = groups.map((group) => ({
+      value: group,
+      label: group,
+    }))
+    if (
+      !groupsQuery.isPending &&
+      defaultValues.DefaultRegistrationGroup &&
+      !groups.includes(defaultValues.DefaultRegistrationGroup)
+    ) {
+      options.unshift({
+        value: defaultValues.DefaultRegistrationGroup,
+        label: `${defaultValues.DefaultRegistrationGroup} (${t('Unavailable')})`,
+        disabled: true,
+      })
+    }
+    return options
+  }, [
+    defaultValues.DefaultRegistrationGroup,
+    groupsQuery.data?.data,
+    groupsQuery.isPending,
+    t,
+  ])
 
   const formDefaults = useMemo<BasicAuthFormValues>(
     () => ({
@@ -83,6 +123,17 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
   useResetForm(form, formDefaults)
 
   const onSubmit = async (data: BasicAuthFormValues) => {
+    if (
+      data.DefaultRegistrationGroup !==
+        defaultValues.DefaultRegistrationGroup &&
+      !groupsQuery.data?.data?.includes(data.DefaultRegistrationGroup)
+    ) {
+      form.setError('DefaultRegistrationGroup', {
+        type: 'manual',
+        message: t('Select an available group'),
+      })
+      return
+    }
     const updates: Array<{ key: string; value: string | boolean }> = []
 
     Object.entries(data).forEach(([key, value]) => {
@@ -153,6 +204,62 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                   />
                 </FormControl>
               </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='DefaultRegistrationGroup'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Default Registration Group')}</FormLabel>
+                <FormControl>
+                  <Combobox
+                    options={groupOptions}
+                    value={field.value}
+                    onValueChange={(value) => field.onChange(value ?? '')}
+                    onBlur={field.onBlur}
+                    disabled={groupsQuery.isPending || groupsQuery.isError}
+                    placeholder={t('Select a group')}
+                    searchPlaceholder={t('Search groups...')}
+                    emptyText={t('No groups available')}
+                    aria-label={t('Default Registration Group')}
+                    aria-invalid={Boolean(
+                      form.formState.errors.DefaultRegistrationGroup
+                    )}
+                    className='w-full'
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t('Group assigned to users who register themselves')}
+                </FormDescription>
+                {groupsQuery.isPending && (
+                  <LoadingState
+                    inline
+                    size='sm'
+                    message={t('Loading groups...')}
+                  />
+                )}
+                {groupsQuery.isError && (
+                  <ErrorState
+                    className='min-h-24'
+                    title={t('Failed to load groups')}
+                    description={t(
+                      'The saved group is preserved. Retry before changing it.'
+                    )}
+                    onRetry={() => groupsQuery.refetch()}
+                  />
+                )}
+                {!groupsQuery.isPending &&
+                  !groupsQuery.isError &&
+                  (groupsQuery.data?.data?.length ?? 0) === 0 && (
+                    <EmptyState
+                      className='min-h-24'
+                      title={t('No groups available')}
+                    />
+                  )}
+                <FormMessage />
+              </FormItem>
             )}
           />
 

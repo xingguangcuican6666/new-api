@@ -281,7 +281,12 @@ func Register(c *gin.Context) {
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
+	if err := cleanUser.InsertForRegistration(inviterId); err != nil {
+		if errors.Is(err, setting.ErrRegistrationGroupUnavailable) {
+			common.SysError("registration group configuration rejected password registration: " + err.Error())
+			common.ApiErrorI18n(c, i18n.MsgUserRegisterFailed)
+			return
+		}
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
 			return
