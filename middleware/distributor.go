@@ -131,8 +131,10 @@ func Distribute() func(c *gin.Context) {
 					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled {
 						affinitySatisfied, _ = model.ChannelSatisfiesFilters(preferred, modelRequest.Model, constraints.Filters)
 						if affinitySatisfied {
-							// The user's failure breaker outranks channel affinity.
-							affinitySatisfied = !service.IsUserChannelExcluded(c.GetInt("id"), preferred.Id)
+							// The user's failure breaker and the channel error-rate
+							// cooldown outrank channel affinity.
+							affinitySatisfied = !service.IsUserChannelExcluded(c.GetInt("id"), preferred.Id) &&
+								!service.ChannelInErrorCooldown(preferred.Id)
 						}
 					}
 					if affinitySatisfied {

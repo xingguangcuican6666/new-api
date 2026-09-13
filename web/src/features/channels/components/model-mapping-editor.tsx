@@ -90,7 +90,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
       const entries = Object.entries(parsed)
       const invalidValue = entries.find(([, to]) => typeof to !== 'string')
       if (invalidValue) {
-        setJsonError(t('Model mapping values must be strings'))
+        setJsonError(t('Model mapping queues are edited in JSON mode'))
         return false
       }
       setRows((previousRows) => {
@@ -329,7 +329,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
           <JsonCodeEditor
             value={jsonValue}
             onChange={handleJsonChange}
-            placeholder={t('{"original-model": "replacement-model"}')}
+            placeholder={t('{"model": "upstream", "multi": ["upstream-1", {"model": "upstream-2", "retry": 1}]}')}
             disabled={props.disabled}
             className={jsonError ? 'border-destructive' : undefined}
             aria-invalid={Boolean(jsonError)}

@@ -46,6 +46,7 @@ import {
   stringifyAdvancedCustomConfig,
   validateAdvancedCustomConfig,
 } from './advanced-custom'
+import { validateModelMappingJson } from './model-mapping-validation'
 
 // ============================================================================
 // Form Validation Schema
@@ -134,13 +135,11 @@ function isOptionalJsonObject(value: string | undefined): boolean {
 
 function isOptionalModelMapping(value: string | undefined): boolean {
   try {
-    const parsed = parseOptionalJson(value)
-    if (parsed === undefined) return true
-    if (!isJsonObjectValue(parsed)) return false
-    return Object.values(parsed).every((item) => typeof item === 'string')
+    if (parseOptionalJson(value) === undefined) return true
   } catch {
     return false
   }
+  return validateModelMappingJson(value ?? '').valid
 }
 
 function isOptionalStatusCodeMapping(value: string | undefined): boolean {
@@ -386,7 +385,7 @@ export const channelFormSchema = z
       .optional()
       .refine(
         isOptionalModelMapping,
-        'Model mapping must be a JSON object with string values'
+        'Model mapping must be a JSON object of strings or ordered model queues'
       ),
     priority: z.number().optional(),
     weight: z.number().optional(),

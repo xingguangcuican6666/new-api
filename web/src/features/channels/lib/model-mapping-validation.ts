@@ -179,10 +179,10 @@ export function validateModelMappingJson(modelMapping: string): {
         error: 'Model mapping must be a valid JSON object',
       }
     }
-    if (Object.values(parsed).some((value) => typeof value !== 'string')) {
+    if (Object.values(parsed).some((value) => !isValidModelMappingValue(value))) {
       return {
         valid: false,
-        error: 'Model mapping values must be strings',
+        error: 'Model mapping must be a JSON object of strings or ordered model queues',
       }
     }
     return { valid: true }
@@ -192,6 +192,31 @@ export function validateModelMappingJson(modelMapping: string): {
       error: 'Model mapping must be valid JSON format',
     }
   }
+}
+
+/**
+ * A mapping value is either an upstream model name or an ordered queue of
+ * upstream targets: model names or {"model": ..., "retry": n} objects.
+ */
+export function isValidModelMappingValue(value: unknown): boolean {
+  if (typeof value === 'string') return true
+  if (!Array.isArray(value)) return false
+  return value.every((item) => {
+    if (typeof item === 'string') return item.trim() !== ''
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const record = item as Record<string, unknown>
+      if (typeof record.model !== 'string' || record.model.trim() === '') {
+        return false
+      }
+      return (
+        record.retry === undefined ||
+        (typeof record.retry === 'number' &&
+          Number.isInteger(record.retry) &&
+          record.retry >= 0)
+      )
+    }
+    return false
+  })
 }
 
 /**

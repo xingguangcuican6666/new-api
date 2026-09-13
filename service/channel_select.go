@@ -114,9 +114,12 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
 	filters := GetChannelConstraints(param.Ctx).Filters
 	// Skip channels this user has burned through with consecutive real-request
-	// failures. The exclusion is local to this selection so pins and channel
+	// failures, plus channels temporarily skipped by the error-rate breaker.
+	// The exclusion is local to this selection so pins and channel
 	// affinity (validated via ChannelSatisfiesFilters) keep their own semantics.
-	if excluded := UserExcludedChannelIDs(param.Ctx.GetInt("id")); len(excluded) > 0 {
+	excluded := UserExcludedChannelIDs(param.Ctx.GetInt("id"))
+	excluded = append(excluded, CooldownExcludedChannelIds()...)
+	if len(excluded) > 0 {
 		filters = append(slices.Clone(filters), dto.ChannelFilter{
 			Kind:              dto.FilterExcludeChannelIds,
 			ExcludeChannelIds: excluded,

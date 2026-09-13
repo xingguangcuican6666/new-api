@@ -201,6 +201,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	// autoDisabledError keeps the real upstream error that triggered a channel
 	// auto-disable during this request, so the final failure can be echoed.
 	var autoDisabledError *types.NewAPIError
+	// Ordered model-mapping queue for the selected channel: entries are tried
+	// in JSON order (with their own retry counts) before the normal
+	// channel-switching logic takes over.
+	var modelMappingQueue []helper.ModelMappingQueueEntry
+	queueEntryIndex, queueAttemptIndex := 0, 0
+	// attemptedOnce marks the very first upstream attempt of the request, the
+	// only one that feeds the per-user channel breaker.
+	attemptedOnce := false
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
@@ -212,6 +220,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				break
 			}
 			channel = selectedChannel
+			modelMappingQueue = helper.ResolveModelMappingQueue(common.GetContextKeyString(c, constant.ContextKeyChannelModelMapping), relayInfo.OriginModelName)
+			queueEntryIndex, queueAttemptIndex = 0, 0
 		}
 		addUsedChannel(c, channel.Id)
 		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
@@ -231,6 +241,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
+		if len(modelMappingQueue) > 0 {
+			common.SetContextKey(c, constant.ContextKeyChannelModelMappingQueue, modelMappingQueue[queueEntryIndex].UpstreamModel)
+		} else {
+			common.SetContextKey(c, constant.ContextKeyChannelModelMappingQueue, "")
+		}
+
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
 			newAPIError = relay.WssHelper(c, relayInfo)
@@ -242,9 +258,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = relayHandler(c, relayInfo)
 		}
 
+		// Every real upstream attempt feeds the channel error-rate window.
+		service.RecordChannelAttemptOutcome(channel.Id, newAPIError != nil)
+
 		// The first attempt is the user's real request hitting its routed
-		// channel; gateway-side retries below never update the user breaker.
-		if retryParam.GetRetry() == 0 && channel != nil {
+		// channel; gateway-side retries (and mapping-queue attempts) below
+		// never update the user breaker.
+		if !attemptedOnce && channel != nil {
+			attemptedOnce = true
 			if userId := c.GetInt("id"); userId > 0 {
 				if newAPIError != nil {
 					service.RecordUserChannelFailure(userId, channel.Id, string(newAPIError.GetErrorCode()), newAPIError.Error())
@@ -263,8 +284,29 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.LastError = newAPIError
 
 		channelSettings := channel.GetOtherSettings()
-		if processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, &channelSettings, true, relayInfo) {
+		disabledNow := processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, &channelSettings, true, relayInfo)
+		if disabledNow {
 			autoDisabledError = newAPIError
+		}
+
+		// A failed mapping-queue entry moves to the next one on the same
+		// channel without consuming the channel-retry budget; once the queue
+		// is exhausted the original retry logic resumes. Skip-retry errors
+		// (request/billing side) and auto-disable triggers end the queue.
+		if newAPIError != nil && len(modelMappingQueue) > 0 && !disabledNow && !types.IsSkipRetryError(newAPIError) {
+			if queueAttemptIndex < modelMappingQueue[queueEntryIndex].Retry {
+				queueAttemptIndex++
+				retrySameChannel = true
+				retryParam.ResetRetryNextTry()
+				continue
+			}
+			if queueEntryIndex+1 < len(modelMappingQueue) {
+				queueEntryIndex++
+				queueAttemptIndex = 0
+				retrySameChannel = true
+				retryParam.ResetRetryNextTry()
+				continue
+			}
 		}
 
 		retrySameChannel = types.IsEmptyResponseRetryError(newAPIError) && helper.EmptyResponseRetryInPlaceEnabled(relayInfo)
@@ -682,6 +724,14 @@ func executeTaskSubmissionWith(
 	// channel auto-disable during this submission, so the final failure can
 	// be echoed downstream with 502.
 	var autoDisabledTaskErr *taskdto.TaskError
+	// Ordered model-mapping queue for the selected channel; entries are tried
+	// in JSON order (with their own retry counts) before the normal
+	// channel-switching logic takes over.
+	var modelMappingQueue []helper.ModelMappingQueueEntry
+	queueEntryIndex, queueAttemptIndex := 0, 0
+	// attemptedOnce marks the very first upstream attempt of the request, the
+	// only one that feeds the per-user channel breaker.
+	attemptedOnce := false
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		stage = "select_channel"
@@ -709,6 +759,8 @@ func executeTaskSubmissionWith(
 				break
 			}
 		}
+		modelMappingQueue = helper.ResolveModelMappingQueue(common.GetContextKeyString(c, constant.ContextKeyChannelModelMapping), relayInfo.OriginModelName)
+		queueEntryIndex, queueAttemptIndex = 0, 0
 		diagnostics.attempt(retryParam.GetRetry()+1, channel, relayInfo.LockedChannel != nil)
 
 		addUsedChannel(c, channel.Id)
@@ -724,6 +776,12 @@ func executeTaskSubmissionWith(
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
+		if len(modelMappingQueue) > 0 {
+			common.SetContextKey(c, constant.ContextKeyChannelModelMappingQueue, modelMappingQueue[queueEntryIndex].UpstreamModel)
+		} else {
+			common.SetContextKey(c, constant.ContextKeyChannelModelMappingQueue, "")
+		}
+
 		stage = "submit"
 		result, taskErr = submit(c, relayInfo)
 		if requestErr := c.Request.Context().Err(); requestErr != nil {
@@ -731,10 +789,16 @@ func executeTaskSubmissionWith(
 			taskErr = service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
 			break
 		}
+		// Every real upstream attempt feeds the channel error-rate window;
+		// local failures never reached the upstream and do not count.
+		if taskErr == nil || !taskErr.LocalError {
+			service.RecordChannelAttemptOutcome(channel.Id, taskErr != nil)
+		}
 		// The first attempt is the user's real request; only upstream failures
 		// of that attempt feed the user breaker (local errors are not the
 		// channel's fault, and gateway-side retries are not recorded).
-		if retryParam.GetRetry() == 0 && channel != nil && relayInfo.LockedChannel == nil {
+		if !attemptedOnce && channel != nil && relayInfo.LockedChannel == nil {
+			attemptedOnce = true
 			if userId := c.GetInt("id"); userId > 0 {
 				switch {
 				case taskErr == nil:
@@ -749,14 +813,33 @@ func executeTaskSubmissionWith(
 			break
 		}
 
+		disabledNow := false
 		if !taskErr.LocalError {
 			channelSettings := channel.GetOtherSettings()
-			if processChannelError(c,
+			disabledNow = processChannelError(c,
 				*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey,
 					common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
 				types.NewOpenAIError(taskErr.Error, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode),
-				&channelSettings, true, relayInfo) {
+				&channelSettings, true, relayInfo)
+			if disabledNow {
 				autoDisabledTaskErr = taskErr
+			}
+		}
+
+		// A failed mapping-queue entry moves to the next one on the same
+		// channel without consuming the channel-retry budget; once the queue
+		// is exhausted the original retry logic resumes.
+		if !taskErr.LocalError && len(modelMappingQueue) > 0 && !disabledNow {
+			if queueAttemptIndex < modelMappingQueue[queueEntryIndex].Retry {
+				queueAttemptIndex++
+				retryParam.ResetRetryNextTry()
+				continue
+			}
+			if queueEntryIndex+1 < len(modelMappingQueue) {
+				queueEntryIndex++
+				queueAttemptIndex = 0
+				retryParam.ResetRetryNextTry()
+				continue
 			}
 		}
 
