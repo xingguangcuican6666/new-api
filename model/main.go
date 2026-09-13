@@ -137,8 +137,20 @@ func normalizeClickHouseDSN(dsn string) string {
 	return parsed.String()
 }
 
+// primaryDSNOverride redirects the primary database to the node-link tunnel
+// DSN when this instance joined a master's database cluster.
+var primaryDSNOverride string
+
+// SetPrimaryDSNOverride installs the node-link tunnel DSN used by the next
+// InitDB call.
+func SetPrimaryDSNOverride(dsn string) { primaryDSNOverride = dsn }
+
 func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error) {
 	dsn := os.Getenv(envName)
+	if envName == "SQL_DSN" && primaryDSNOverride != "" {
+		common.SysLog("using node link tunnel DSN as primary database")
+		dsn = primaryDSNOverride
+	}
 	if dsn != "" {
 		if isClickHouseDSN(dsn) {
 			if !isLog {

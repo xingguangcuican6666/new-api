@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { NodeLinkSection } from '../general/node-link-section'
 import { SystemInfoSection } from '../general/system-info-section'
 import {
   parseHeaderNavModules,
@@ -50,6 +51,11 @@ const SITE_SECTIONS = [
         }}
       />
     ),
+  },
+  {
+    id: 'node-link',
+    titleKey: 'Node Link',
+    build: () => <NodeLinkSection />,
   },
   {
     id: 'notice',

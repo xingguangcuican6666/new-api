@@ -308,6 +308,12 @@ func InitResources() error {
 
 	service.InitTokenEncoders()
 
+	// Node link: re-arm the tunnel listener and point the primary database at
+	// the master before opening database pools.
+	if dsn, ok := service.ActivateNodeLinkOnBoot(); ok {
+		model.SetPrimaryDSNOverride(dsn)
+	}
+
 	// Initialize SQL Database
 	err = model.InitDB()
 	if err != nil {

@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 
 	// Import oauth package to register providers via init()
@@ -329,6 +330,22 @@ func SetApiRouter(router *gin.Engine) {
 			systemInfoRoute.DELETE("/stale-instances", controller.DeleteStaleSystemInstances)
 			systemInfoRoute.DELETE("/instances/:node_name", controller.DeleteStaleSystemInstance)
 		}
+
+		nodeLinkRoute := apiRouter.Group("/node_link")
+		nodeLinkRoute.Use(middleware.RootAuth())
+		{
+			nodeLinkRoute.GET("/", controller.GetNodeLinkStatus)
+			nodeLinkRoute.POST("/token", controller.CreateNodeLinkToken)
+			nodeLinkRoute.POST("/connect", controller.ConnectNodeLink)
+			nodeLinkRoute.POST("/adopt", controller.AdoptNodeLink)
+			nodeLinkRoute.POST("/push-adopt", controller.PushAdoptNodeLink)
+			nodeLinkRoute.POST("/disconnect", controller.DisconnectNodeLink)
+			nodeLinkRoute.DELETE("/children/:name", controller.RemoveNodeLinkChild)
+		}
+		// Peer-server endpoints: authenticated with pairing tokens inside the
+		// handlers, not with dashboard sessions.
+		apiRouter.POST("/node_link/register", controller.RegisterNodeLink)
+		apiRouter.GET("/node_link/tunnel", service.NodeLinkTunnelHandler)
 
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
