@@ -107,17 +107,27 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 }
 
 func GetChannel(
-	group string,
+	groups []string,
 	model string,
 	retry int,
 	filters []dto.ChannelFilter,
 ) (*Channel, error) {
 	var abilities []Ability
-	err := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, model, true).Order("priority DESC, weight DESC").Find(&abilities).Error
+	err := DB.Where(commonGroupCol+" IN ? and model = ? and enabled = ?", groups, model, true).Order("priority DESC, weight DESC").Find(&abilities).Error
 	if err != nil {
 		return nil, err
 	}
 	abilities = filterAbilitiesByConstraints(abilities, model, filters)
+	// A channel may appear once per matched group; keep only its first entry
+	// so weighted selection cannot double-count it.
+	seenChannels := make(map[int]struct{}, len(abilities))
+	abilities = lo.Filter(abilities, func(ability Ability, _ int) bool {
+		if _, dup := seenChannels[ability.ChannelId]; dup {
+			return false
+		}
+		seenChannels[ability.ChannelId] = struct{}{}
+		return true
+	})
 	if excludedIds := breakerExcludedChannelIds(filters); excludedIds != nil && len(abilities) > 0 {
 		kept := make([]Ability, 0, len(abilities))
 		for _, ability := range abilities {

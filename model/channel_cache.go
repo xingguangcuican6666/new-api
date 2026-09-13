@@ -116,26 +116,43 @@ func SyncChannelCache(frequency int) {
 }
 
 func GetRandomSatisfiedChannel(
-	group string,
+	groups []string,
 	model string,
 	retry int,
 	filters []dto.ChannelFilter,
 ) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannel(group, model, retry, filters)
+		return GetChannel(groups, model, retry, filters)
 	}
 
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()
 
+	// Merge candidates across the requested groups, preserving pool order and
+	// dropping channels already contributed by an earlier group.
+	mergeGroupCandidates := func(modelName string) []int {
+		var merged []int
+		seen := make(map[int]struct{})
+		for _, group := range groups {
+			ids, _ := filterCandidateIDs(group2model2channels[group][modelName], model, filters)
+			for _, id := range ids {
+				if _, dup := seen[id]; !dup {
+					seen[id] = struct{}{}
+					merged = append(merged, id)
+				}
+			}
+		}
+		return merged
+	}
+
 	// First, try to find channels with the exact model name.
-	channels, _ := filterCandidateIDs(group2model2channels[group][model], model, filters)
+	channels := mergeGroupCandidates(model)
 
 	// If no channels found, try to find channels with the normalized model name.
 	if len(channels) == 0 {
 		normalizedModel := ratio_setting.RoutingMatchModelName(model)
-		channels, _ = filterCandidateIDs(group2model2channels[group][normalizedModel], model, filters)
+		channels = mergeGroupCandidates(normalizedModel)
 	}
 
 	if excludedIds := breakerExcludedChannelIds(filters); excludedIds != nil && len(channels) > 0 {
@@ -196,7 +213,7 @@ func GetRandomSatisfiedChannel(
 	}
 
 	if len(targetChannels) == 0 {
-		return nil, errors.New(fmt.Sprintf("no channel found, group: %s, model: %s, priority: %d", group, model, targetPriority))
+		return nil, errors.New(fmt.Sprintf("no channel found, groups: %v, model: %s, priority: %d", groups, model, targetPriority))
 	}
 
 	// smoothing factor and adjustment

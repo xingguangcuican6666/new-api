@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -11,11 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const userCacheSchemaVersion = 2
+const userCacheSchemaVersion = 3
 
 type UserBase struct {
 	Id          int    `json:"id"`
 	Group       string `json:"group"`
+	Groups      string `json:"groups"` // comma-separated additional groups beyond Group
 	Email       string `json:"email"`
 	Quota       int    `json:"quota"`
 	Status      int    `json:"status"`
@@ -26,8 +28,28 @@ type UserBase struct {
 	CacheSchema int    `json:"-"`
 }
 
+// UserGroupPool returns the user's routing groups: the primary group first,
+// then the additional ones. It is the pool channel selection may draw from
+// when the request does not pin a specific group.
+func (user *UserBase) UserGroupPool() []string {
+	pool := make([]string, 0, 3)
+	seen := make(map[string]struct{}, 3)
+	for _, group := range append([]string{user.Group}, strings.Split(user.Groups, ",")...) {
+		if group = strings.TrimSpace(group); group == "" {
+			continue
+		}
+		if _, dup := seen[group]; dup {
+			continue
+		}
+		seen[group] = struct{}{}
+		pool = append(pool, group)
+	}
+	return pool
+}
+
 func (user *UserBase) WriteContext(c *gin.Context) {
 	common.SetContextKey(c, constant.ContextKeyUserGroup, user.Group)
+	common.SetContextKey(c, constant.ContextKeyUserGroups, user.UserGroupPool())
 	common.SetContextKey(c, constant.ContextKeyUserQuota, user.Quota)
 	common.SetContextKey(c, constant.ContextKeyUserStatus, user.Status)
 	common.SetContextKey(c, constant.ContextKeyUserEmail, user.Email)

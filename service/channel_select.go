@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -154,7 +155,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 
 			var selectErr error
 			channel, selectErr = model.GetRandomSatisfiedChannel(
-				autoGroup,
+				[]string{autoGroup},
 				param.ModelName,
 				priorityRetry,
 				filters,
@@ -202,14 +203,38 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			return nil, selectGroup, model.ErrUserChannelsExhausted
 		}
 	} else {
+		// When the request does not pin a token group, the user's own group
+		// pool (primary + admin-assigned extras) is the selection pool.
+		groups := []string{param.TokenGroup}
+		if param.TokenGroup == userGroup {
+			if userGroups, ok := common.GetContextKeyType[[]string](param.Ctx, constant.ContextKeyUserGroups); ok && len(userGroups) > 1 {
+				groups = userGroups
+			}
+		}
 		channel, err = model.GetRandomSatisfiedChannel(
-			param.TokenGroup,
+			groups,
 			param.ModelName,
 			param.GetRetry(),
 			filters,
 		)
 		if err != nil {
 			return nil, param.TokenGroup, err
+		}
+		if channel != nil && len(groups) > 1 {
+			// Align routing and billing with the group that actually matched:
+			// group ratio, group-group special ratio and logs follow it.
+			channelGroups := strings.Split(channel.Group, ",")
+			for _, group := range groups {
+				if !slices.Contains(channelGroups, group) {
+					continue
+				}
+				if group != param.TokenGroup {
+					common.SetContextKey(param.Ctx, constant.ContextKeyUsingGroup, group)
+					common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, group)
+					selectGroup = group
+				}
+				break
+			}
 		}
 	}
 	return channel, selectGroup, nil

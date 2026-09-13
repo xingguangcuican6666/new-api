@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
-import { Pencil } from 'lucide-react'
+import { Pencil, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -31,6 +31,7 @@ import {
   sideDrawerFormClassName,
   sideDrawerHeaderClassName,
 } from '@/components/drawer-layout'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Combobox } from '@/components/ui/combobox'
@@ -161,6 +162,7 @@ export function UsersMutateDrawer({
 
   const currentQuotaRaw = form.watch('quota_dollars') || 0
   const selectedRole = form.watch('role')
+  const primaryGroup = form.watch('group')
   const canEditAdminPermissions = currentUser?.role === ROLE.SUPER_ADMIN
   const targetIsAdmin = (selectedRole ?? currentRow?.role ?? 0) >= ROLE.ADMIN
 
@@ -381,6 +383,75 @@ export function UsersMutateDrawer({
                         <FormMessage />
                       </FormItem>
                     )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='groups'
+                    render={({ field }) => {
+                      const selectableGroups = groups.filter(
+                        (group) =>
+                          group !== primaryGroup && !field.value.includes(group)
+                      )
+                      return (
+                        <FormItem>
+                          <FormLabel>{t('Additional Groups')}</FormLabel>
+                          <FormControl>
+                            <div className='space-y-2'>
+                              <Combobox
+                                options={selectableGroups.map((group) => ({
+                                  value: group,
+                                  label: group,
+                                }))}
+                                onValueChange={(value) => {
+                                  if (value && !field.value.includes(value)) {
+                                    field.onChange([...field.value, value])
+                                  }
+                                }}
+                                value=''
+                                className='w-full'
+                                placeholder={t('Select additional groups')}
+                                aria-label={t('Additional Groups')}
+                              />
+                              {field.value.length > 0 && (
+                                <div className='flex flex-wrap gap-1.5'>
+                                  {field.value.map((group) => (
+                                    <Badge key={group} variant='secondary'>
+                                      {group}
+                                      <button
+                                        type='button'
+                                        className='ml-1 rounded-sm outline-none focus-visible:ring-1'
+                                        aria-label={t(
+                                          'Remove group {{group}}',
+                                          {
+                                            group,
+                                          }
+                                        )}
+                                        onClick={() =>
+                                          field.onChange(
+                                            field.value.filter(
+                                              (selected) => selected !== group
+                                            )
+                                          )
+                                        }
+                                      >
+                                        <X className='h-3 w-3' />
+                                      </button>
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </FormControl>
+                          <FormDescription>
+                            {t(
+                              'Requests may also be served and billed by these groups'
+                            )}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )
+                    }}
                   />
 
                   <FormField

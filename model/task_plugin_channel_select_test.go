@@ -28,22 +28,22 @@ func TestTaskPluginChannelSelectionFiltersBothCachePaths(t *testing.T) {
 		require.NoError(t, channels[i].Insert())
 	}
 
-	selected, err := GetChannel("default", "shared", 0, identityFilters("alpha", nil))
+	selected, err := GetChannel([]string{"default"}, "shared", 0, identityFilters("alpha", nil))
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, "alpha", selected.Name)
-	selected, err = GetChannel("default", "shared", 0, identityFilters("", nil))
+	selected, err = GetChannel([]string{"default"}, "shared", 0, identityFilters("", nil))
 	require.NoError(t, err)
 	assert.Nil(t, selected)
-	selected, err = GetChannel("default", "ordinary", 0, identityFilters("", nil))
+	selected, err = GetChannel([]string{"default"}, "ordinary", 0, identityFilters("", nil))
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, "ordinary", selected.Name)
-	selected, err = GetChannel("default", "legacy", 0, identityFilters("legacy-alpha", []int{constant.ChannelTypeKling}))
+	selected, err = GetChannel([]string{"default"}, "legacy", 0, identityFilters("legacy-alpha", []int{constant.ChannelTypeKling}))
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, "legacy-alpha", selected.Name)
-	selected, err = GetChannel("default", "legacy", 0, identityFilters("legacy-alpha", []int{constant.ChannelTypeKling, constant.ChannelTypeJimeng}))
+	selected, err = GetChannel([]string{"default"}, "legacy", 0, identityFilters("legacy-alpha", []int{constant.ChannelTypeKling, constant.ChannelTypeJimeng}))
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Contains(t, []string{"legacy-alpha", "legacy-beta"}, selected.Name)
@@ -68,32 +68,32 @@ func TestUserChannelExclusionFiltersBothCachePaths(t *testing.T) {
 
 	// Database selection path (memory cache disabled).
 	common.MemoryCacheEnabled = false
-	selected, err := GetChannel("default", "shared-user-model", 0, excludeAlpha)
+	selected, err := GetChannel([]string{"default"}, "shared-user-model", 0, excludeAlpha)
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, "beta", selected.Name)
 
-	selected, err = GetChannel("default", "shared-user-model", 0, excludeAll)
+	selected, err = GetChannel([]string{"default"}, "shared-user-model", 0, excludeAll)
 	require.ErrorIs(t, err, ErrUserChannelsExhausted)
 	assert.Nil(t, selected)
 
-	selected, err = GetChannel("default", "shared-user-model", 0, nil)
+	selected, err = GetChannel([]string{"default"}, "shared-user-model", 0, nil)
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 
 	// In-memory cache selection path.
 	common.MemoryCacheEnabled = true
 	InitChannelCache()
-	selected, err = GetRandomSatisfiedChannel("default", "shared-user-model", 0, excludeAlpha)
+	selected, err = GetRandomSatisfiedChannel([]string{"default"}, "shared-user-model", 0, excludeAlpha)
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, "beta", selected.Name)
 
-	selected, err = GetRandomSatisfiedChannel("default", "shared-user-model", 0, excludeAll)
+	selected, err = GetRandomSatisfiedChannel([]string{"default"}, "shared-user-model", 0, excludeAll)
 	require.ErrorIs(t, err, ErrUserChannelsExhausted)
 	assert.Nil(t, selected)
 
-	selected, err = GetRandomSatisfiedChannel("default", "shared-user-model", 0, nil)
+	selected, err = GetRandomSatisfiedChannel([]string{"default"}, "shared-user-model", 0, nil)
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 }
@@ -104,4 +104,51 @@ func identityFilters(key string, channelTypes []int) []dto.ChannelFilter {
 		TaskPluginKey:          key,
 		TaskPluginChannelTypes: channelTypes,
 	}}
+}
+
+func TestUserGroupPoolSelectionAcrossGroups(t *testing.T) {
+	truncateTables(t)
+	high, low := int64(10), int64(0)
+	weight := uint(1)
+	channels := []Channel{
+		{Id: 930001, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Name: "default-high", Models: "pool-model,only-default", Group: "default", Priority: &high, Weight: &weight},
+		{Id: 930002, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Name: "vip-low", Models: "pool-model,only-vip", Group: "vip", Priority: &low, Weight: &weight},
+	}
+	for i := range channels {
+		require.NoError(t, channels[i].Insert())
+	}
+	pool := []string{"default", "vip"}
+
+	previousMemoryCache := common.MemoryCacheEnabled
+	t.Cleanup(func() { common.MemoryCacheEnabled = previousMemoryCache })
+
+	// Database selection path.
+	common.MemoryCacheEnabled = false
+	selected, err := GetChannel(pool, "only-vip", 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, selected)
+	assert.Equal(t, "vip-low", selected.Name, "a model served only by an extra group must be reachable")
+
+	selected, err = GetChannel(pool, "pool-model", 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, selected)
+	assert.Equal(t, "default-high", selected.Name, "channel priority orders the merged pool")
+
+	selected, err = GetChannel(pool, "pool-model", 1, nil)
+	require.NoError(t, err)
+	require.NotNil(t, selected)
+	assert.Equal(t, "vip-low", selected.Name, "retry walks the merged priority tiers")
+
+	// In-memory cache selection path.
+	common.MemoryCacheEnabled = true
+	InitChannelCache()
+	selected, err = GetRandomSatisfiedChannel(pool, "only-vip", 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, selected)
+	assert.Equal(t, "vip-low", selected.Name)
+
+	selected, err = GetRandomSatisfiedChannel(pool, "pool-model", 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, selected)
+	assert.Equal(t, "default-high", selected.Name)
 }

@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
@@ -99,6 +101,7 @@ type User struct {
 	UsedQuota            int                        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
 	RequestCount         int                        `json:"request_count" gorm:"type:int;default:0;"`               // request number
 	Group                string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
+	Groups               string                     `json:"groups" gorm:"type:varchar(255);column:groups"` // comma-separated additional groups beyond Group, see GetExtraGroups
 	AffCode              string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	AffCount             int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
 	AffQuota             int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
@@ -119,6 +122,7 @@ func (user *User) ToBaseUser() *UserBase {
 	cache := &UserBase{
 		Id:          user.Id,
 		Group:       user.Group,
+		Groups:      user.Groups,
 		Quota:       user.Quota,
 		Status:      user.Status,
 		Role:        user.Role,
@@ -129,6 +133,51 @@ func (user *User) ToBaseUser() *UserBase {
 		CacheSchema: userCacheSchemaVersion,
 	}
 	return cache
+}
+
+// GetExtraGroups returns the additional groups assigned beyond the primary
+// Group, in stored order.
+func (user *User) GetExtraGroups() []string {
+	groups := make([]string, 0, 3)
+	for _, group := range strings.Split(user.Groups, ",") {
+		if group = strings.TrimSpace(group); group != "" {
+			groups = append(groups, group)
+		}
+	}
+	return groups
+}
+
+// NormalizeUserExtraGroups trims, deduplicates and validates the additional
+// groups an admin assigns to a user. The primary group and reserved names are
+// dropped, and every remaining group must exist in GroupRatio.
+func NormalizeUserExtraGroups(primary string, groups []string) ([]string, error) {
+	const maxUserGroupLength = 64
+	normalized := make([]string, 0, len(groups))
+	seen := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		group = strings.TrimSpace(group)
+		if group == "" || group == primary || group == "auto" {
+			continue
+		}
+		if utf8.RuneCountInString(group) > maxUserGroupLength || len(group) > maxUserGroupLength {
+			return nil, fmt.Errorf("分组 %s 超过 %d 个字符", group, maxUserGroupLength)
+		}
+		if !utf8.ValidString(group) {
+			return nil, fmt.Errorf("分组名包含非法字符")
+		}
+		if _, dup := seen[group]; dup {
+			continue
+		}
+		if !ratio_setting.ContainsGroupRatio(group) {
+			return nil, fmt.Errorf("分组 %s 不存在", group)
+		}
+		seen[group] = struct{}{}
+		normalized = append(normalized, group)
+	}
+	if len(strings.Join(normalized, ",")) > 255 {
+		return nil, fmt.Errorf("附加分组总长度超过限制")
+	}
+	return normalized, nil
 }
 
 func (user *User) GetAccessToken() string {
@@ -901,6 +950,7 @@ func (user *User) EditWithTx(tx *gorm.DB, updatePassword bool) error {
 		"username":     newUser.Username,
 		"display_name": newUser.DisplayName,
 		"group":        newUser.Group,
+		"groups":       newUser.Groups,
 		"remark":       newUser.Remark,
 	}
 	if updatePassword {

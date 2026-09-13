@@ -208,10 +208,18 @@ func getModelListGroups(c *gin.Context) (modelListGroups, error) {
 	if tokenGroup != "" {
 		group = tokenGroup
 	}
+	// Without a pinned token group the user may draw from every group the
+	// admin assigned to them.
+	ownerGroups := []string{group}
+	if tokenGroup == "" {
+		if userGroups, ok := common.GetContextKeyType[[]string](c, constant.ContextKeyUserGroups); ok && len(userGroups) > 0 {
+			ownerGroups = userGroups
+		}
+	}
 	return modelListGroups{
 		userGroup:   userGroup,
 		tokenGroup:  tokenGroup,
-		ownerGroups: []string{group},
+		ownerGroups: ownerGroups,
 	}, nil
 }
 

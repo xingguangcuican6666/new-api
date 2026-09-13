@@ -680,6 +680,12 @@ func UpdateUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
+	normalizedGroups, err := model.NormalizeUserExtraGroups(updatedUser.Group, strings.Split(updatedUser.Groups, ","))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	updatedUser.Groups = strings.Join(normalizedGroups, ",")
 	updatePassword := updatedUser.Password != ""
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {

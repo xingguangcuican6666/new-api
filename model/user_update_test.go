@@ -2,10 +2,12 @@ package model
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -397,4 +399,57 @@ func TestResetUserPasswordByEmailRequiresSingleActiveMatch(t *testing.T) {
 
 	err = ResetUserPasswordByEmail("missing@example.com", "NewPassword123")
 	require.True(t, errors.Is(err, ErrEmailNotFound))
+}
+
+func TestNormalizeUserExtraGroups(t *testing.T) {
+	original := ratio_setting.GroupRatio2JSONString()
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":2,"free":0}`))
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(original))
+	})
+
+	normalized, err := NormalizeUserExtraGroups("default", []string{" vip ", "vip", "default", "auto", "", "free"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vip", "free"}, normalized)
+
+	normalized, err = NormalizeUserExtraGroups("default", nil)
+	require.NoError(t, err)
+	assert.Empty(t, normalized)
+
+	_, err = NormalizeUserExtraGroups("default", []string{"unknown-group"})
+	require.ErrorContains(t, err, "unknown-group")
+
+	_, err = NormalizeUserExtraGroups("default", []string{strings.Repeat("界", 30)})
+	require.Error(t, err)
+}
+
+func TestUserExtraGroupsPersistAndFeedRoutingPool(t *testing.T) {
+	setupUserUpdateTestState(t)
+	original := ratio_setting.GroupRatio2JSONString()
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":2}`))
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(original))
+	})
+
+	user := createUserBindTestUser(t)
+	normalized, err := NormalizeUserExtraGroups(user.Group, []string{"vip"})
+	require.NoError(t, err)
+	user.Groups = strings.Join(normalized, ",")
+	require.NoError(t, user.Edit(false))
+
+	reloaded, err := GetUserById(user.Id, false)
+	require.NoError(t, err)
+	assert.Equal(t, "vip", reloaded.Groups)
+	assert.Equal(t, []string{"default", "vip"}, reloaded.ToBaseUser().UserGroupPool())
+
+	// A user without extras routes on the primary group alone.
+	plain := User{
+		Username: "plain-groups-user", Password: "unused-password-hash",
+		Role: common.RoleCommonUser, Status: common.UserStatusEnabled,
+		Group: "default", AuthVersion: 1, AffCode: "plain-groups-aff",
+	}
+	require.NoError(t, DB.Create(&plain).Error)
+	reloaded, err = GetUserById(plain.Id, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"default"}, reloaded.ToBaseUser().UserGroupPool())
 }
