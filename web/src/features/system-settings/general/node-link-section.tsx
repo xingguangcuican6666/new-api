@@ -89,7 +89,8 @@ export function NodeLinkSection() {
 
   const statusQuery = useQuery({
     queryKey: ['node-link'],
-    queryFn: async () => requireServerSuccess(await api.get('/api/node_link/')),
+    queryFn: async () =>
+      requireServerSuccess((await api.get('/api/node_link/')).data),
     refetchInterval: 30_000,
   })
   const status: NodeLinkStatus | undefined = statusQuery.data?.data
