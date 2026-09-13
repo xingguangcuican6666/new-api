@@ -198,6 +198,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	// on to the next candidate.
 	var channel *model.Channel
 	retrySameChannel := false
+	// autoDisabledError keeps the real upstream error that triggered a channel
+	// auto-disable during this request, so the final failure can be echoed.
+	var autoDisabledError *types.NewAPIError
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
@@ -260,7 +263,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.LastError = newAPIError
 
 		channelSettings := channel.GetOtherSettings()
-		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, &channelSettings, true, relayInfo)
+		if processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, &channelSettings, true, relayInfo) {
+			autoDisabledError = newAPIError
+		}
 
 		retrySameChannel = types.IsEmptyResponseRetryError(newAPIError) && helper.EmptyResponseRetryInPlaceEnabled(relayInfo)
 
@@ -274,6 +279,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		retryLogStr := fmt.Sprintf("重试：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
 	}
+	if newAPIError != nil && autoDisabledError != nil {
+		// This request triggered a channel auto-disable based on the real
+		// upstream response: answer downstream with 502 carrying that real
+		// upstream error payload instead of the last attempt's own status.
+		disabledErr := *autoDisabledError
+		disabledErr.StatusCode = http.StatusBadGateway
+		newAPIError = &disabledErr
+	}
+
 	if newAPIError != nil {
 		gopool.Go(func() {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
@@ -430,11 +444,16 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int, c
 	return operation_setting.ShouldRetryByStatusCode(code)
 }
 
-func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, channelSettings *dto.ChannelOtherSettings, allowRuntimeDisable bool, relayInfo *relaycommon.RelayInfo) {
+// processChannelError records a channel failure and, when the real upstream
+// response matches the runtime-disable rules, disables the channel. It reports
+// whether this call triggered the disable so callers can shape the downstream
+// response.
+func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, channelSettings *dto.ChannelOtherSettings, allowRuntimeDisable bool, relayInfo *relaycommon.RelayInfo) bool {
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.Error())))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
-	if allowRuntimeDisable && service.ShouldRuntimeDisableChannel(err, channelSettings) && channelError.AutoBan {
+	shouldRuntimeDisable := allowRuntimeDisable && service.ShouldRuntimeDisableChannel(err, channelSettings) && channelError.AutoBan
+	if shouldRuntimeDisable {
 		gopool.Go(func() {
 			service.DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
@@ -464,6 +483,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		model.RecordErrorLog(c, userId, channelError.ChannelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
 	}
 
+	return shouldRuntimeDisable
 }
 
 func RelayMidjourney(c *gin.Context) {
@@ -658,6 +678,10 @@ func executeTaskSubmissionWith(
 		RequestPath: c.Request.URL.Path,
 		Retry:       common.GetPointer(0),
 	}
+	// autoDisabledTaskErr keeps the real upstream error that triggered a
+	// channel auto-disable during this submission, so the final failure can
+	// be echoed downstream with 502.
+	var autoDisabledTaskErr *taskdto.TaskError
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		stage = "select_channel"
@@ -727,11 +751,13 @@ func executeTaskSubmissionWith(
 
 		if !taskErr.LocalError {
 			channelSettings := channel.GetOtherSettings()
-			processChannelError(c,
+			if processChannelError(c,
 				*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey,
 					common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
 				types.NewOpenAIError(taskErr.Error, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode),
-				&channelSettings, true, relayInfo)
+				&channelSettings, true, relayInfo) {
+				autoDisabledTaskErr = taskErr
+			}
 		}
 
 		willRetry := shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-retryParam.GetRetry())
@@ -748,6 +774,14 @@ func executeTaskSubmissionWith(
 	}
 
 	if taskErr != nil {
+		if autoDisabledTaskErr != nil {
+			// The submission triggered a channel auto-disable from a real
+			// upstream response: answer downstream with 502 carrying that
+			// real upstream error payload.
+			taskErr.StatusCode = http.StatusBadGateway
+			taskErr.Code = autoDisabledTaskErr.Code
+			taskErr.Message = autoDisabledTaskErr.Message
+		}
 		diagnostics.failed(stage, "task_error", taskErr, false)
 		return nil, taskErr
 	}
