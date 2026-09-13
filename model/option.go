@@ -202,14 +202,21 @@ func InitOptionMap() {
 }
 
 func loadOptionsFromDatabase() {
+	passkeyOptionMutex.Lock()
+	defer passkeyOptionMutex.Unlock()
 	options, err := AllOption()
 	if err != nil {
 		common.SysError("failed to load options: " + err.Error())
 		return
 	}
 	loadRegistrationGroupOptions(options)
+	passkeyOptions := make(map[string]string)
 	for _, option := range options {
 		if isRegistrationGroupOption(option.Key) {
+			continue
+		}
+		if IsPasskeyDomainOption(option.Key) {
+			passkeyOptions[option.Key] = option.Value
 			continue
 		}
 		err := updateOptionMap(option.Key, option.Value)
@@ -217,6 +224,7 @@ func loadOptionsFromDatabase() {
 			common.SysLog("failed to update option map: " + err.Error())
 		}
 	}
+	applyPasskeyDomainOptions(passkeyOptions)
 }
 
 func SyncOptions(frequency int) {
@@ -249,6 +257,10 @@ func UpdateOption(key string, value string) error {
 			return err
 		}
 		return updateRegistrationGroupOptions(map[string]string{key: value})
+	}
+	if IsPasskeyDomainOption(key) {
+		_, err := UpdatePasskeyDomainOptions(map[string]string{key: value}, false, "")
+		return err
 	}
 	if IsModelPricingOption(key) {
 		return UpdateModelPricingOptions(map[string]string{key: value})
@@ -283,6 +295,12 @@ func UpdateOption(key string, value string) error {
 func UpdateOptionsBulk(values map[string]string) error {
 	if len(values) == 0 {
 		return nil
+	}
+	for key := range values {
+		if IsPasskeyDomainOption(key) {
+			_, err := UpdatePasskeyDomainOptions(values, false, "")
+			return err
+		}
 	}
 	for key, value := range values {
 		if err := validateOptionValue(key, value); err != nil {
