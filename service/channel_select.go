@@ -107,24 +107,30 @@ func (p *RetryParam) ResetRetryNextTry() {
 //
 //	Retry=3: GroupB, priority1 (startRetryIndex=2, priorityRetry=1)
 //	         分组B, 优先级1
-func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, error) {
-	var channel *model.Channel
-	var err error
-	selectGroup := param.TokenGroup
-	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
+//
+// channelExclusionFilters builds the channel-id exclusion filter applied to
+// selection: the per-user failure breaker is a hard exclusion, the error-rate
+// cooldown a soft one that the caller may drop as a last resort.
+func channelExclusionFilters(param *RetryParam, includeCooldown bool) []dto.ChannelFilter {
 	filters := GetChannelConstraints(param.Ctx).Filters
-	// Skip channels this user has burned through with consecutive real-request
-	// failures, plus channels temporarily skipped by the error-rate breaker.
-	// The exclusion is local to this selection so pins and channel
-	// affinity (validated via ChannelSatisfiesFilters) keep their own semantics.
 	excluded := UserExcludedChannelIDs(param.Ctx.GetInt("id"))
-	excluded = append(excluded, CooldownExcludedChannelIds()...)
+	if includeCooldown {
+		excluded = append(excluded, CooldownExcludedChannelIds()...)
+	}
 	if len(excluded) > 0 {
 		filters = append(slices.Clone(filters), dto.ChannelFilter{
 			Kind:              dto.FilterExcludeChannelIds,
 			ExcludeChannelIds: excluded,
 		})
 	}
+	return filters
+}
+
+func selectChannelWithFilters(param *RetryParam, filters []dto.ChannelFilter) (*model.Channel, string, error) {
+	var channel *model.Channel
+	var err error
+	selectGroup := param.TokenGroup
+	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetRequestAutoGroups(param.Ctx, userGroup)
@@ -241,6 +247,33 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 		}
 	}
 	return channel, selectGroup, nil
+}
+
+func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, error) {
+	channel, selectGroup, err := selectChannelWithFilters(param, channelExclusionFilters(param, true))
+	if err == nil || !errors.Is(err, model.ErrUserChannelsExhausted) {
+		return channel, selectGroup, err
+	}
+
+	// The candidate pool was emptied by exclusions. The error-rate cooldown is
+	// advisory and must not strand the request when the skipped channels are
+	// the only ones able to serve it: retry while ignoring the cooldown, so a
+	// skipped channel is only bypassed while other channels remain available.
+	// The per-user breaker keeps its hard semantics. The auto-group state
+	// mutated by the first pass is restored before retrying.
+	entryRetry := param.GetRetry()
+	entryAutoGroupIndex, hadAutoGroupIndex := common.GetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex)
+	param.SetRetry(entryRetry)
+	if hadAutoGroupIndex {
+		common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, entryAutoGroupIndex)
+	} else {
+		common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, 0)
+	}
+	channel, selectGroup, err = selectChannelWithFilters(param, channelExclusionFilters(param, false))
+	if err == nil && channel != nil {
+		logger.LogWarn(param.Ctx, "error-rate cooldown channel served as last resort: model=%s channel=#%d", param.ModelName, channel.Id)
+	}
+	return channel, selectGroup, err
 }
 
 func pinnedTaskPluginChannelTypes(c *gin.Context, expected string) []int {

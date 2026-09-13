@@ -127,3 +127,59 @@ func TestCacheGetRandomSatisfiedChannelUsesTokenAutoGroupsWhenGlobalAutoIsEmpty(
 	assert.Equal(t, "default", selectedGroup)
 	assert.Equal(t, "default", common.GetContextKeyString(ctx, constant.ContextKeyAutoGroup))
 }
+
+func TestCacheGetRandomSatisfiedChannelServesErrorRateCooldownChannelAsLastResort(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	const modelName = "cooldown-last-resort-model"
+	createChannelSelectAutoGroupsChannel(t, db, 2201, "default", modelName)
+	model.InitChannelCache()
+
+	channelErrorWindowsMu.Lock()
+	channelErrorWindows = make(map[int]*channelErrorWindow)
+	channelErrorWindowsMu.Unlock()
+	t.Cleanup(func() {
+		channelErrorWindowsMu.Lock()
+		channelErrorWindows = make(map[int]*channelErrorWindow)
+		channelErrorWindowsMu.Unlock()
+	})
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+
+	newParam := func() *RetryParam {
+		retry := 0
+		return &RetryParam{
+			Ctx:         ctx,
+			TokenGroup:  "default",
+			ModelName:   modelName,
+			RequestPath: "/v1/chat/completions",
+			Retry:       &retry,
+		}
+	}
+
+	// Fill the window with 25/30 failures: the error-rate cooldown is armed.
+	for i := 0; i < 5; i++ {
+		RecordChannelAttemptOutcome(2201, false)
+	}
+	for i := 0; i < 25; i++ {
+		RecordChannelAttemptOutcome(2201, true)
+	}
+	require.True(t, ChannelInErrorCooldown(2201))
+
+	// The cooled channel is the only candidate: skipping it would strand the
+	// request, so it still serves.
+	param := newParam()
+	channel, _, err := CacheGetRandomSatisfiedChannel(param)
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, 2201, channel.Id)
+
+	// Once another healthy channel exists, the cooled one is skipped again.
+	createChannelSelectAutoGroupsChannel(t, db, 2202, "default", modelName)
+	model.InitChannelCache()
+	channel, _, err = CacheGetRandomSatisfiedChannel(newParam())
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, 2202, channel.Id)
+}
