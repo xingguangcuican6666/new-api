@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Code, Plus, Table, Trash2 } from 'lucide-react'
+import { Code, Plus, Table, Trash2, X } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -34,10 +34,16 @@ type ModelMappingEditorProps = {
   targetModelOptions?: string[]
 }
 
+type MappingTarget = {
+  key: string
+  model: string
+  retry: string
+}
+
 type MappingRow = {
   id: string
   from: string
-  to: string
+  targets: MappingTarget[]
 }
 
 const DUPLICATE_MAPPING_SENTINEL = '{ "duplicate_source_models": '
@@ -59,6 +65,26 @@ function getDuplicateSources(rows: MappingRow[]): string[] {
   return Array.from(duplicates)
 }
 
+// A single target without retries serializes as a plain string so legacy
+// 1:1 mappings stay untouched; anything richer becomes an ordered queue.
+function serializeTargets(targets: MappingTarget[]): string | unknown[] {
+  const entries = targets
+    .map((target) => ({
+      model: target.model.trim(),
+      retry: Number.parseInt(target.retry, 10) || 0,
+    }))
+    .filter((target) => target.model !== '')
+  if (entries.length === 0) {
+    return ''
+  }
+  if (entries.length === 1 && entries[0].retry <= 0) {
+    return entries[0].model
+  }
+  return entries.map((entry) =>
+    entry.retry > 0 ? { model: entry.model, retry: entry.retry } : entry.model
+  )
+}
+
 export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const { t } = useTranslation()
   const sourceListId = useId()
@@ -67,12 +93,36 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const [rows, setRows] = useState<MappingRow[]>([])
   const [jsonValue, setJsonValue] = useState(props.value)
   const [jsonError, setJsonError] = useState<string | null>(null)
-  const nextRowIdRef = useRef(0)
+  const nextIdRef = useRef(0)
   const duplicateSources = useMemo(() => getDuplicateSources(rows), [rows])
 
-  const createRowId = () => {
-    nextRowIdRef.current += 1
-    return `mapping-${nextRowIdRef.current}`
+  const createId = (prefix: string) => {
+    nextIdRef.current += 1
+    return `${prefix}-${nextIdRef.current}`
+  }
+
+  const parseTargets = (value: unknown): MappingTarget[] => {
+    const items = Array.isArray(value) ? value : [value]
+    const targets: MappingTarget[] = []
+    for (const item of items) {
+      if (typeof item === 'string' && item.trim() !== '') {
+        targets.push({ key: createId('target'), model: item, retry: '' })
+      } else if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const record = item as Record<string, unknown>
+        if (typeof record.model === 'string' && record.model.trim() !== '') {
+          const retry =
+            typeof record.retry === 'number' && record.retry > 0
+              ? String(record.retry)
+              : ''
+          targets.push({
+            key: createId('target'),
+            model: record.model,
+            retry,
+          })
+        }
+      }
+    }
+    return targets
   }
 
   const parseJsonToRows = (json: string): boolean => {
@@ -88,33 +138,50 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
         return false
       }
       const entries = Object.entries(parsed)
-      const invalidValue = entries.find(([, to]) => typeof to !== 'string')
+      const invalidValue = entries.find(
+        ([, value]) =>
+          typeof value !== 'string' &&
+          !(Array.isArray(value) && value.length > 0) &&
+          !(
+            value &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            typeof (value as Record<string, unknown>).model === 'string'
+          )
+      )
       if (invalidValue) {
-        setJsonError(t('Model mapping queues are edited in JSON mode'))
+        setJsonError(
+          t(
+            'Model mapping must be a JSON object of strings or ordered model queues'
+          )
+        )
         return false
       }
       setRows((previousRows) => {
         const remainingRows = [...previousRows]
-        return entries.map(([from, to], index) => {
-          const toString = String(to)
+        return entries.map(([from, value]) => {
           const existingIndex = remainingRows.findIndex(
-            (row) =>
-              row.from === from ||
-              (row.from === from && row.to === toString) ||
-              previousRows[index]?.id === row.id
+            (row) => row.from === from
           )
+          const parsedTargets = parseTargets(value)
           if (existingIndex >= 0) {
             const [existing] = remainingRows.splice(existingIndex, 1)
             return {
               id: existing.id,
               from,
-              to: toString,
+              targets:
+                parsedTargets.length > 0
+                  ? parsedTargets
+                  : [{ key: createId('target'), model: '', retry: '' }],
             }
           }
           return {
-            id: createRowId(),
+            id: createId('mapping'),
             from,
-            to: toString,
+            targets:
+              parsedTargets.length > 0
+                ? parsedTargets
+                : [{ key: createId('target'), model: '', retry: '' }],
           }
         })
       })
@@ -137,10 +204,10 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     if (updatedRows.length === 0) {
       return ''
     }
-    const obj: Record<string, string> = {}
+    const obj: Record<string, unknown> = {}
     updatedRows.forEach((row) => {
       if (row.from.trim()) {
-        obj[row.from.trim()] = row.to.trim()
+        obj[row.from.trim()] = serializeTargets(row.targets)
       }
     })
     return JSON.stringify(obj, null, 2)
@@ -164,9 +231,9 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
 
   const handleAddRow = () => {
     const newRow: MappingRow = {
-      id: createRowId(),
+      id: createId('mapping'),
       from: '',
-      to: '',
+      targets: [{ key: createId('target'), model: '', retry: '' }],
     }
     syncRows([...rows, newRow])
   }
@@ -175,13 +242,54 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     syncRows(rows.filter((row) => row.id !== id))
   }
 
-  const handleRowChange = (
-    id: string,
-    field: 'from' | 'to',
+  const handleRowChange = (id: string, field: 'from', newValue: string) => {
+    const updatedRows = rows.map((row) =>
+      row.id === id ? { ...row, [field]: newValue } : row
+    )
+    syncRows(updatedRows)
+  }
+
+  const handleTargetChange = (
+    rowId: string,
+    targetKey: string,
+    field: 'model' | 'retry',
     newValue: string
   ) => {
     const updatedRows = rows.map((row) =>
-      row.id === id ? { ...row, [field]: newValue } : row
+      row.id === rowId
+        ? {
+            ...row,
+            targets: row.targets.map((target) =>
+              target.key === targetKey
+                ? { ...target, [field]: newValue }
+                : target
+            ),
+          }
+        : row
+    )
+    syncRows(updatedRows)
+  }
+
+  const handleAddTarget = (rowId: string) => {
+    const updatedRows = rows.map((row) =>
+      row.id === rowId
+        ? {
+            ...row,
+            targets: [
+              ...row.targets,
+              { key: createId('target'), model: '', retry: '' },
+            ],
+          }
+        : row
+    )
+    syncRows(updatedRows)
+  }
+
+  const handleDeleteTarget = (rowId: string, targetKey: string) => {
+    const updatedRows = rows.map((row) =>
+      row.id === rowId
+        ? { ...row, targets: row.targets.filter((t) => t.key !== targetKey) }
+        : row
     )
     syncRows(updatedRows)
   }
@@ -194,7 +302,13 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
 
   const handleFillTemplate = () => {
     const template = JSON.stringify(
-      { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
+      {
+        'gpt-3.5-turbo': 'gpt-3.5-turbo-0125',
+        'gemini-2.5-pro': [
+          'gemini-2.5-pro-06-05',
+          { model: 'gemini-2.5-pro-free', retry: 1 },
+        ],
+      },
       null,
       2
     )
@@ -264,7 +378,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
         <TabsContent value='visual' className='space-y-2'>
           {rows.length > 0 ? (
             <div className='space-y-2'>
-              <div className='grid grid-cols-[1fr_1fr_auto] gap-2 text-sm font-medium'>
+              <div className='grid grid-cols-[1fr_2fr_auto] gap-2 text-sm font-medium'>
                 <div>{t('Original Model')}</div>
                 <div>{t('Replacement Model')}</div>
                 <div className='w-10'></div>
@@ -272,7 +386,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
               {rows.map((row) => (
                 <div
                   key={row.id}
-                  className='grid grid-cols-[1fr_1fr_auto] gap-2'
+                  className='grid grid-cols-[1fr_2fr_auto] items-start gap-2'
                 >
                   <Input
                     value={row.from}
@@ -281,17 +395,77 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                     }
                     placeholder='gpt-3.5-turbo'
                     disabled={props.disabled}
+                    className='h-10'
                     list={sourceListId}
                   />
-                  <Input
-                    value={row.to}
-                    onChange={(e) =>
-                      handleRowChange(row.id, 'to', e.target.value)
-                    }
-                    placeholder='gpt-3.5-turbo-0125'
-                    disabled={props.disabled}
-                    list={targetListId}
-                  />
+                  <div className='space-y-1.5'>
+                    {row.targets.map((target) => (
+                      <div
+                        key={target.key}
+                        className='flex items-center gap-1.5'
+                      >
+                        <Input
+                          value={target.model}
+                          onChange={(e) =>
+                            handleTargetChange(
+                              row.id,
+                              target.key,
+                              'model',
+                              e.target.value
+                            )
+                          }
+                          placeholder='gpt-3.5-turbo-0125'
+                          disabled={props.disabled}
+                          className='h-10 flex-1'
+                          list={targetListId}
+                        />
+                        <Input
+                          value={target.retry}
+                          onChange={(e) =>
+                            handleTargetChange(
+                              row.id,
+                              target.key,
+                              'retry',
+                              e.target.value
+                            )
+                          }
+                          type='number'
+                          min={0}
+                          step={1}
+                          placeholder='0'
+                          disabled={props.disabled}
+                          className='h-10 w-16'
+                          aria-label={t('Retry count')}
+                        />
+                        {row.targets.length > 1 && (
+                          <Button
+                            type='button'
+                            variant='ghost'
+                            size='icon'
+                            onClick={() =>
+                              handleDeleteTarget(row.id, target.key)
+                            }
+                            disabled={props.disabled}
+                            className='h-9 w-9'
+                            aria-label={t('Delete target')}
+                          >
+                            <X className='h-4 w-4' aria-hidden='true' />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      className='h-7 px-2 text-xs'
+                      onClick={() => handleAddTarget(row.id)}
+                      disabled={props.disabled}
+                    >
+                      <Plus className='mr-1 h-3 w-3' aria-hidden='true' />
+                      {t('Add Target')}
+                    </Button>
+                  </div>
                   <Button
                     type='button'
                     variant='ghost'
@@ -329,7 +503,9 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
           <JsonCodeEditor
             value={jsonValue}
             onChange={handleJsonChange}
-            placeholder={t('{"model": "upstream", "multi": ["upstream-1", {"model": "upstream-2", "retry": 1}]}')}
+            placeholder={t(
+              '{"model": "upstream", "multi": ["upstream-1", {"model": "upstream-2", "retry": 1}]}'
+            )}
             disabled={props.disabled}
             className={jsonError ? 'border-destructive' : undefined}
             aria-invalid={Boolean(jsonError)}
