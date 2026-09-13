@@ -91,6 +91,20 @@ const CONFIGURATION_BLOCKS = {
     ],
   },
   internalNotes: { section: 'other', fields: ['tag', 'remark'] },
+  autoDisable: {
+    section: 'routing',
+    fields: [
+      'runtime_automatic_disable_override_enabled',
+      'runtime_automatic_disable_status_codes',
+      'runtime_automatic_disable_keywords',
+      'automatic_retry_status_codes',
+      'automatic_retry_keywords',
+      'empty_response_retry_enabled',
+      'empty_response_retry_in_place',
+    ],
+  },
+  billingQuery: { section: 'connection', fields: ['billing_query'] },
+  ratioProbe: { section: 'other', fields: ['ratio_probe'] },
 } as const satisfies Record<
   string,
   {
@@ -176,6 +190,20 @@ export function getChannelConfigurationState(
         values.upstream_model_update_ignored_models?.trim()
       ),
     internalNotes: Boolean(values.tag?.trim() || values.remark?.trim()),
+    autoDisable: Boolean(
+      values.runtime_automatic_disable_override_enabled ||
+      values.runtime_automatic_disable_status_codes?.trim() ||
+      values.runtime_automatic_disable_keywords?.trim() ||
+      values.automatic_retry_status_codes?.trim() ||
+      values.automatic_retry_keywords?.trim() ||
+      values.empty_response_retry_enabled
+    ),
+    billingQuery: Boolean(
+      values.billing_query &&
+      values.billing_query.type &&
+      String(values.billing_query.type) !== '__channel_default__'
+    ),
+    ratioProbe: Boolean(values.ratio_probe?.enabled),
   }
   const blocks = {} as Record<
     ChannelConfigurationBlock,
