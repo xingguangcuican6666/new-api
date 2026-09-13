@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -117,6 +118,18 @@ func GetChannel(
 		return nil, err
 	}
 	abilities = filterAbilitiesByConstraints(abilities, model, filters)
+	if excludedIds := breakerExcludedChannelIds(filters); excludedIds != nil && len(abilities) > 0 {
+		kept := make([]Ability, 0, len(abilities))
+		for _, ability := range abilities {
+			if !slices.Contains(excludedIds, ability.ChannelId) {
+				kept = append(kept, ability)
+			}
+		}
+		if len(kept) == 0 {
+			return nil, ErrUserChannelsExhausted
+		}
+		abilities = kept
+	}
 	if len(abilities) > 0 {
 		priorities := make([]int64, 0)
 		seen := make(map[int64]bool)

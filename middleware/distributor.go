@@ -129,6 +129,10 @@ func Distribute() func(c *gin.Context) {
 					affinitySatisfied := false
 					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled {
 						affinitySatisfied, _ = model.ChannelSatisfiesFilters(preferred, modelRequest.Model, constraints.Filters)
+						if affinitySatisfied {
+							// The user's failure breaker outranks channel affinity.
+							affinitySatisfied = !service.IsUserChannelExcluded(c.GetInt("id"), preferred.Id)
+						}
 					}
 					if affinitySatisfied {
 						if usingGroup == "auto" {
@@ -165,6 +169,15 @@ func Distribute() func(c *gin.Context) {
 						Retry:       common.GetPointer(0),
 					})
 					if err != nil {
+						if errors.Is(err, model.ErrUserChannelsExhausted) {
+							// Every candidate channel is excluded for this user by
+							// the failure breaker: echo the first failure with 502.
+							if errorCode, message, ok := service.FirstUserChannelFailure(c.GetInt("id")); ok {
+								logger.LogWarn(c, "user exhausted all candidate channels: group=%s model=%s", usingGroup, modelRequest.Model)
+								abortWithOpenAiMessage(c, http.StatusBadGateway, message, types.ErrorCode(errorCode))
+								return
+							}
+						}
 						showGroup := usingGroup
 						if usingGroup == "auto" {
 							showGroup = fmt.Sprintf("auto(%s)", selectGroup)

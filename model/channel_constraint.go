@@ -1,11 +1,27 @@
 package model
 
 import (
+	"errors"
 	"slices"
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 )
+
+// ErrUserChannelsExhausted reports that every candidate channel for the
+// request was excluded by the requesting user's failure breaker.
+var ErrUserChannelsExhausted = errors.New("all candidate channels are excluded by the user failure breaker")
+
+// breakerExcludedChannelIds returns the per-user excluded channel ids carried
+// by filters, or nil when the request carries no such exclusion.
+func breakerExcludedChannelIds(filters []dto.ChannelFilter) []int {
+	for _, filter := range filters {
+		if filter.Kind == dto.FilterExcludeChannelIds && len(filter.ExcludeChannelIds) > 0 {
+			return filter.ExcludeChannelIds
+		}
+	}
+	return nil
+}
 
 var filterEvalOrder = []dto.ChannelFilterKind{
 	dto.FilterRequestPath,

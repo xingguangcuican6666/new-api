@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -135,6 +136,19 @@ func GetRandomSatisfiedChannel(
 	if len(channels) == 0 {
 		normalizedModel := ratio_setting.RoutingMatchModelName(model)
 		channels, _ = filterCandidateIDs(group2model2channels[group][normalizedModel], model, filters)
+	}
+
+	if excludedIds := breakerExcludedChannelIds(filters); excludedIds != nil && len(channels) > 0 {
+		kept := make([]int, 0, len(channels))
+		for _, channelId := range channels {
+			if !slices.Contains(excludedIds, channelId) {
+				kept = append(kept, channelId)
+			}
+		}
+		if len(kept) == 0 {
+			return nil, ErrUserChannelsExhausted
+		}
+		channels = kept
 	}
 
 	if len(channels) == 0 {

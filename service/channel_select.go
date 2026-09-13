@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"slices"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -111,6 +112,15 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	selectGroup := param.TokenGroup
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
 	filters := GetChannelConstraints(param.Ctx).Filters
+	// Skip channels this user has burned through with consecutive real-request
+	// failures. The exclusion is local to this selection so pins and channel
+	// affinity (validated via ChannelSatisfiesFilters) keep their own semantics.
+	if excluded := UserExcludedChannelIDs(param.Ctx.GetInt("id")); len(excluded) > 0 {
+		filters = append(slices.Clone(filters), dto.ChannelFilter{
+			Kind:              dto.FilterExcludeChannelIds,
+			ExcludeChannelIds: excluded,
+		})
+	}
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetRequestAutoGroups(param.Ctx, userGroup)
@@ -122,6 +132,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 		// startGroupIndex: 开始搜索的分组索引
 		startGroupIndex := 0
 		crossGroupRetry := common.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
+		exhaustedByBreaker := false
 
 		if lastGroupIndex, exists := common.GetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex); exists {
 			if idx, ok := lastGroupIndex.(int); ok {
@@ -141,7 +152,8 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			}
 			logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: %d", autoGroup, priorityRetry)
 
-			channel, _ = model.GetRandomSatisfiedChannel(
+			var selectErr error
+			channel, selectErr = model.GetRandomSatisfiedChannel(
 				autoGroup,
 				param.ModelName,
 				priorityRetry,
@@ -151,6 +163,9 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 				// Current group has no available channel for this model, try next group
 				// 当前分组没有该模型的可用渠道，尝试下一个分组
 				logger.LogDebug(param.Ctx, "No available channel in group %s for model %s at priorityRetry %d, trying next group", autoGroup, param.ModelName, priorityRetry)
+				if errors.Is(selectErr, model.ErrUserChannelsExhausted) {
+					exhaustedByBreaker = true
+				}
 				// 重置状态以尝试下一个分组
 				common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i+1)
 				common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupRetryIndex, 0)
@@ -182,6 +197,9 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 				common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i)
 			}
 			break
+		}
+		if channel == nil && exhaustedByBreaker {
+			return nil, selectGroup, model.ErrUserChannelsExhausted
 		}
 	} else {
 		channel, err = model.GetRandomSatisfiedChannel(

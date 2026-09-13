@@ -239,6 +239,18 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = relayHandler(c, relayInfo)
 		}
 
+		// The first attempt is the user's real request hitting its routed
+		// channel; gateway-side retries below never update the user breaker.
+		if retryParam.GetRetry() == 0 && channel != nil {
+			if userId := c.GetInt("id"); userId > 0 {
+				if newAPIError != nil {
+					service.RecordUserChannelFailure(userId, channel.Id, string(newAPIError.GetErrorCode()), newAPIError.Error())
+				} else {
+					service.ResetUserChannelFailures(userId, channel.Id)
+				}
+			}
+		}
+
 		if newAPIError == nil {
 			relayInfo.LastError = nil
 			return
@@ -359,6 +371,18 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 	if err != nil {
+		if errors.Is(err, model.ErrUserChannelsExhausted) {
+			// All remaining candidate channels are excluded for this user; the
+			// request cannot be served, so echo the episode's first failure.
+			if _, message, ok := service.FirstUserChannelFailure(c.GetInt("id")); ok {
+				return nil, types.NewError(
+					errors.New(message),
+					types.ErrorCodeGetChannelFailed,
+					types.ErrOptionWithStatusCode(http.StatusBadGateway),
+					types.ErrOptionWithSkipRetry(),
+				)
+			}
+		}
 		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 	if channel == nil {
@@ -682,6 +706,19 @@ func executeTaskSubmissionWith(
 			diagnostics.cancelled("after_submit", retryParam.GetRetry()+1)
 			taskErr = service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
 			break
+		}
+		// The first attempt is the user's real request; only upstream failures
+		// of that attempt feed the user breaker (local errors are not the
+		// channel's fault, and gateway-side retries are not recorded).
+		if retryParam.GetRetry() == 0 && channel != nil && relayInfo.LockedChannel == nil {
+			if userId := c.GetInt("id"); userId > 0 {
+				switch {
+				case taskErr == nil:
+					service.ResetUserChannelFailures(userId, channel.Id)
+				case !taskErr.LocalError:
+					service.RecordUserChannelFailure(userId, channel.Id, taskErr.Code, taskErr.Message)
+				}
+			}
 		}
 		if taskErr == nil {
 			diagnostics.attemptSucceeded(retryParam.GetRetry()+1, result)
