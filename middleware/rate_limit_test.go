@@ -227,9 +227,9 @@ func TestRedisFailurePolicies(t *testing.T) {
 func TestIPRateLimitDisabledPassthrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	_, _ = useRateLimitMiniRedis(t)
-	prev := common.RateLimitByIPDisabled
-	common.RateLimitByIPDisabled = true
-	t.Cleanup(func() { common.RateLimitByIPDisabled = prev })
+	prev := common.NginxMode
+	common.NginxMode = true
+	t.Cleanup(func() { common.NginxMode = prev })
 
 	router := gin.New()
 	require.NoError(t, router.SetTrustedProxies(nil))

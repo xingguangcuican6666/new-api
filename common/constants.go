@@ -233,13 +233,23 @@ var (
 	SearchRateLimitNum            = 10
 	SearchRateLimitDuration int64 = 60
 
-	// Disable all IP-keyed rate limiting when the deployment sits behind a
-	// single reverse proxy (e.g. nginx). Every client then shares one address,
-	// so the IP budget is exhausted by legitimate users and the proxy is
-	// indistinguishable from an attacker. Turning this on makes the global,
-	// critical, email-verification, download/upload and task-artifact limiters
-	// no-ops while per-user (authenticated) limiters keep working.
-	RateLimitByIPDisabled = false
+	// NginxMode declares that this instance sits behind a reverse proxy —
+	// typically nginx in a Docker deployment — where every client arrives from
+	// the same container network address. Counting requests per IP then charges
+	// one shared address for everyone's traffic, so the first legitimate user
+	// to exhaust the budget locks out the whole deployment, and an actual
+	// attacker is indistinguishable from that user.
+	//
+	// While it is on, every IP-keyed limiter is a no-op: global web/API,
+	// critical, email verification, upload/download and task-artifact access.
+	// Rate limiting by address becomes the proxy's responsibility, not this
+	// service's. Limiters keyed by authenticated user ID stay active, because
+	// the proxy cannot produce that identity.
+	//
+	// Set it with the NGINX_MODE environment variable or the root setting of
+	// the same name. DISABLE_IP_RATE_LIMIT is an accepted alias for operators
+	// who configured the earlier name.
+	NginxMode = false
 )
 
 var RateLimitKeyExpirationDuration = 20 * time.Minute

@@ -52,11 +52,12 @@ func newTaskArtifactAccessLimiter(limits system_setting.TaskArtifactAccessLimits
 	}
 }
 
-// RateLimitByIPDisabled disables every IP-keyed rate limiter for
-// deployments behind a single reverse proxy (e.g. nginx) where all clients
-// share one address. The global and per-object budgets stay active.
+// NginxMode disables every IP-keyed rate limiter for deployments behind a
+// single reverse proxy (e.g. nginx) where all clients share one address. Here
+// the anonymous invalid-token budget is IP-keyed, so it goes too; the global
+// and per-object concurrency budgets stay active.
 func (l *taskArtifactAccessLimiter) invalidAttempt(now time.Time, ip string) bool {
-	if common.RateLimitByIPDisabled {
+	if common.NginxMode {
 		return true
 	}
 	l.mutex.Lock()
@@ -93,7 +94,7 @@ func (l *taskArtifactAccessLimiter) acquire(ip, taskID, artifactKey string) (fun
 		return nil, false
 	}
 
-	if common.RateLimitByIPDisabled {
+	if common.NginxMode {
 		l.global++
 		l.byObject[objectKey]++
 		var releaseOnce sync.Once

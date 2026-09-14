@@ -136,10 +136,16 @@ func InitEnv() {
 	SearchRateLimitNum = GetEnvOrDefault("SEARCH_RATE_LIMIT", 10)
 	SearchRateLimitDuration = int64(GetEnvOrDefault("SEARCH_RATE_LIMIT_DURATION", 60))
 
-	// RateLimitByIPDisabled switches off every IP-keyed rate limiter for
-	// deployments behind a single reverse proxy (e.g. nginx) where all clients
-	// share one address. Per-user (authenticated) limiters stay active.
-	RateLimitByIPDisabled = GetEnvOrDefaultBool("DISABLE_IP_RATE_LIMIT", false)
+	// NGINX_MODE is the operator-facing switch. DISABLE_IP_RATE_LIMIT is the
+	// earlier name for the same thing and keeps working as an alias, so an
+	// existing deployment does not silently regain IP limiting after an
+	// upgrade. NGINX_MODE wins when both are set. A saved root setting
+	// overrides this bootstrap default once options are loaded from the
+	// database, which is why an unset NGINX_MODE must not force the mode on.
+	NginxMode = GetEnvOrDefaultBool("DISABLE_IP_RATE_LIMIT", false)
+	if nginxModeEnv, err := strconv.ParseBool(os.Getenv("NGINX_MODE")); err == nil {
+		NginxMode = nginxModeEnv
+	}
 	initConstantEnv()
 }
 

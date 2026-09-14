@@ -141,6 +141,8 @@ Redis 限流使用原子 Lua 固定窗口，替代旧的近似滑动窗口 List 
 
 开放注册仍会受 Critical IP 限流保护，但分布式 IP 多账号攻击不能仅靠 IP 限流阻止。公网开放注册的部署应同时启用 Turnstile 和邮箱验证；更强的设备或多维风控需作为独立安全项目设计。
 
+部署在单个反向代理之后（典型如 Docker 里的 Nginx）时，所有客户端在 `ClientIP()` 看来是同一个容器网络地址，按 IP 的限流会先误封正常用户，且无法区分攻击者。`NGINX_MODE=true`（或 root 在 系统设置 → 安全 → 限流 中开启 Nginx 模式）会让全局 Web/API、Critical、邮箱验证、上传下载和任务产物这些按 IP 的限流不再计数，按地址的限流改由反向代理负责；按已认证用户 ID 的限流不受影响，因为代理无法伪造该身份。环境变量 `DISABLE_IP_RATE_LIMIT` 是该开关的旧名，仍作为别名生效，`NGINX_MODE` 与其同时存在时以 `NGINX_MODE` 为准。开启前请先确认代理确实传入并配置了 `X-Forwarded-For`，否则日志与审计中的客户端地址同样只有代理地址。
+
 ## PAT 调用契约
 
 `User.AccessToken`（面板 PAT）继续支持 `Authorization: Bearer <pat>`，也兼容原有的单值 `Authorization: <pat>`。`New-Api-User` 不再参与鉴权，外部脚本不需要再发送 Bearer 与用户 ID 双请求头。这是有意的调用契约简化；旧 PAT 本身无需重新生成。

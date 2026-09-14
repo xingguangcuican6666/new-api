@@ -338,6 +338,9 @@ func InitResources() error {
 		if err := model.MigrateRetiredFrontendOptions(); err != nil {
 			common.SysError("failed to migrate retired frontend options: " + err.Error())
 		}
+		if err := model.MigrateRenamedIPRateLimitOption(); err != nil {
+			common.SysError("failed to migrate the renamed IP rate-limit option: " + err.Error())
+		}
 	}
 	model.InitOptionMap()
 

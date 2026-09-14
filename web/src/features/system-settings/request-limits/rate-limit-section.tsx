@@ -78,7 +78,7 @@ const createRateLimitSchema = (t: (key: string) => string) =>
       .refine(isValidJSON, {
         message: t('Invalid JSON format or values out of allowed range'),
       }),
-    RateLimitByIPDisabled: z.boolean(),
+    NginxMode: z.boolean(),
   })
 
 type RateLimitFormValues = z.infer<ReturnType<typeof createRateLimitSchema>>
@@ -149,16 +149,16 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
 
           <FormField
             control={form.control}
-            name='RateLimitByIPDisabled'
+            name='NginxMode'
             render={({ field }) => (
               <SettingsSwitchItem>
                 <SettingsSwitchContent>
                   <FormLabel>
-                    {t('Disable IP-based rate limiting (behind proxy)')}
+                    {t('Nginx mode (behind a reverse proxy)')}
                   </FormLabel>
                   <FormDescription>
                     {t(
-                      'Turn on when all traffic arrives through a single reverse proxy (e.g. nginx). Every user then shares one IP, so IP-keyed limits block legitimate users. This switches off the global web/API, critical, email-verification and upload/download limiters; per-user limits stay active. Equivalent to the DISABLE_IP_RATE_LIMIT environment variable.'
+                      'Turn on when every request reaches this service through one reverse proxy, such as nginx in a Docker deployment. All users then share a single address, so IP-keyed limits block legitimate users instead of abusers. The global web/API, critical, email-verification, upload/download and task-artifact limits stop counting, and rate limiting by address becomes the proxy\'s job. Per-user limits stay active. Equivalent to the NGINX_MODE environment variable.'
                     )}
                   </FormDescription>
                 </SettingsSwitchContent>
