@@ -107,6 +107,10 @@ func redisFixedWindowTake(ctx context.Context, key string, maxRequestNum int, du
 }
 
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
+	if common.RateLimitByIPDisabled {
+		c.Next()
+		return
+	}
 	allowed, _, ttlSeconds, err := redisFixedWindowTake(
 		c.Request.Context(),
 		redisIPRateLimitKey(mark, c.ClientIP()),
@@ -125,6 +129,10 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 }
 
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
+	if common.RateLimitByIPDisabled {
+		c.Next()
+		return
+	}
 	key := mark + c.ClientIP()
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
 		writeRateLimited(c, duration)

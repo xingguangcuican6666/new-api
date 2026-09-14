@@ -223,3 +223,40 @@ func TestRedisFailurePolicies(t *testing.T) {
 	assert.Empty(t, userResponse.Body.String())
 	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/email", "192.0.2.62:12345").Code)
 }
+
+func TestIPRateLimitDisabledPassthrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	_, _ = useRateLimitMiniRedis(t)
+	prev := common.RateLimitByIPDisabled
+	common.RateLimitByIPDisabled = true
+	t.Cleanup(func() { common.RateLimitByIPDisabled = prev })
+
+	router := gin.New()
+	require.NoError(t, router.SetTrustedProxies(nil))
+
+	// All IP-keyed limiters should pass through even with a cap of 1 request.
+	router.GET("/ip", rateLimitFactory(1, 10, "DIP"), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	router.GET("/email", EmailVerificationRateLimit(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	addr := "203.0.113.72:12345"
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/ip", addr).Code)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/ip", addr).Code,
+		"second IP-limiting request must pass through despite the cap")
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/email", addr).Code)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/email", addr).Code)
+
+	// User-keyed limiter must still enforce its limit when the master switch is on.
+	router2 := gin.New()
+	router2.GET("/user",
+		func(c *gin.Context) { c.Set("id", 99) },
+		userRateLimitFactory(1, 20, "DUP"),
+		func(c *gin.Context) { c.Status(http.StatusNoContent) },
+	)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router2, "/user", "10.0.0.1:12345").Code)
+	assert.Equal(t, http.StatusTooManyRequests, performRateLimitRequest(router2, "/user", "10.0.0.1:12345").Code,
+		"user-keyed limiter must stay active when the master IP switch is on")
+}

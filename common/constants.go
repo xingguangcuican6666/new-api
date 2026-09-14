@@ -232,6 +232,14 @@ var (
 	SearchRateLimitEnable         = true
 	SearchRateLimitNum            = 10
 	SearchRateLimitDuration int64 = 60
+
+	// Disable all IP-keyed rate limiting when the deployment sits behind a
+	// single reverse proxy (e.g. nginx). Every client then shares one address,
+	// so the IP budget is exhausted by legitimate users and the proxy is
+	// indistinguishable from an attacker. Turning this on makes the global,
+	// critical, email-verification, download/upload and task-artifact limiters
+	// no-ops while per-user (authenticated) limiters keep working.
+	RateLimitByIPDisabled = false
 )
 
 var RateLimitKeyExpirationDuration = 20 * time.Minute

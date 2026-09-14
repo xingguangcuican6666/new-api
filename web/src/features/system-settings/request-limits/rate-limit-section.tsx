@@ -78,6 +78,7 @@ const createRateLimitSchema = (t: (key: string) => string) =>
       .refine(isValidJSON, {
         message: t('Invalid JSON format or values out of allowed range'),
       }),
+    RateLimitByIPDisabled: z.boolean(),
   })
 
 type RateLimitFormValues = z.infer<ReturnType<typeof createRateLimitSchema>>
@@ -133,6 +134,31 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                   <FormDescription>
                     {t(
                       'This controls model request rate limiting. Web/API route throttling is configured by environment variables and may still return 429.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='RateLimitByIPDisabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>
+                    {t('Disable IP-based rate limiting (behind proxy)')}
+                  </FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Turn on when all traffic arrives through a single reverse proxy (e.g. nginx). Every user then shares one IP, so IP-keyed limits block legitimate users. This switches off the global web/API, critical, email-verification and upload/download limiters; per-user limits stay active. Equivalent to the DISABLE_IP_RATE_LIMIT environment variable.'
                     )}
                   </FormDescription>
                 </SettingsSwitchContent>

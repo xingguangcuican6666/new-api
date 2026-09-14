@@ -135,6 +135,11 @@ func InitEnv() {
 	SearchRateLimitEnable = GetEnvOrDefaultBool("SEARCH_RATE_LIMIT_ENABLE", true)
 	SearchRateLimitNum = GetEnvOrDefault("SEARCH_RATE_LIMIT", 10)
 	SearchRateLimitDuration = int64(GetEnvOrDefault("SEARCH_RATE_LIMIT_DURATION", 60))
+
+	// RateLimitByIPDisabled switches off every IP-keyed rate limiter for
+	// deployments behind a single reverse proxy (e.g. nginx) where all clients
+	// share one address. Per-user (authenticated) limiters stay active.
+	RateLimitByIPDisabled = GetEnvOrDefaultBool("DISABLE_IP_RATE_LIMIT", false)
 	initConstantEnv()
 }
 

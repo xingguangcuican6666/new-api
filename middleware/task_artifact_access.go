@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
@@ -51,7 +52,13 @@ func newTaskArtifactAccessLimiter(limits system_setting.TaskArtifactAccessLimits
 	}
 }
 
+// RateLimitByIPDisabled disables every IP-keyed rate limiter for
+// deployments behind a single reverse proxy (e.g. nginx) where all clients
+// share one address. The global and per-object budgets stay active.
 func (l *taskArtifactAccessLimiter) invalidAttempt(now time.Time, ip string) bool {
+	if common.RateLimitByIPDisabled {
+		return true
+	}
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -84,6 +91,23 @@ func (l *taskArtifactAccessLimiter) acquire(ip, taskID, artifactKey string) (fun
 		l.byIP[ip] >= l.limits.IPConcurrency ||
 		l.byObject[objectKey] >= l.limits.ObjectConcurrency {
 		return nil, false
+	}
+
+	if common.RateLimitByIPDisabled {
+		l.global++
+		l.byObject[objectKey]++
+		var releaseOnce sync.Once
+		return func() {
+			releaseOnce.Do(func() {
+				l.mutex.Lock()
+				defer l.mutex.Unlock()
+				l.global--
+				l.byObject[objectKey]--
+				if l.byObject[objectKey] == 0 {
+					delete(l.byObject, objectKey)
+				}
+			})
+		}, true
 	}
 
 	l.global++
