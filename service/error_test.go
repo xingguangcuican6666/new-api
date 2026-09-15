@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -157,4 +158,31 @@ func withDebugEnabled(t *testing.T, enabled bool) {
 	t.Cleanup(func() {
 		common.DebugEnabled = oldDebug
 	})
+}
+
+func TestRelayErrorHandlerSanitizesStructuredError(t *testing.T) {
+	original := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = true
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
+
+	resp := &http.Response{
+		StatusCode: http.StatusTooManyRequests,
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"account acct-secret has balance 0","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
+	}
+	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	require.Equal(t, sanitizedUpstreamErrorMessage, newAPIError.Err.Error())
+	require.Equal(t, http.StatusTooManyRequests, newAPIError.StatusCode)
+}
+
+func TestRelayErrorHandlerKeepsStructuredErrorWhenSanitizerDisabled(t *testing.T) {
+	original := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = false
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
+
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"actionable upstream detail","type":"invalid_request_error","code":"invalid_request"}}`)),
+	}
+	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	require.Contains(t, newAPIError.Err.Error(), "actionable upstream detail")
 }

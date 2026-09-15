@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting"
 )
 
 func MidjourneyErrorWrapper(code int, desc string) *taskdto.MidjourneyResponse {
@@ -84,6 +85,16 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 	return claudeErr
 }
 
+const sanitizedUpstreamErrorMessage = "upstream request failed; contact the service administrator with the request ID"
+
+func sanitizeUpstreamError(ctx context.Context, newApiErr *types.NewAPIError, responseBodyPreview string) {
+	if !setting.SanitizeUpstreamErrorEnabled || newApiErr == nil || newApiErr.Err == nil {
+		return
+	}
+	logger.LogError(ctx, fmt.Sprintf("sanitized upstream error: %s, body: %s", newApiErr.Err.Error(), responseBodyPreview))
+	newApiErr.Err = errors.New(sanitizedUpstreamErrorMessage)
+}
+
 func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
 	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 
@@ -121,6 +132,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 			if showBodyWhenFail {
 				newApiErr.Err = buildErrWithBody(newApiErr.Error())
 			}
+			sanitizeUpstreamError(ctx, newApiErr, responseBodyPreview)
 			return
 		}
 	}
@@ -134,6 +146,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 	if showBodyWhenFail {
 		newApiErr.Err = buildErrWithBody(newApiErr.Error())
 	}
+	sanitizeUpstreamError(ctx, newApiErr, responseBodyPreview)
 	return
 }
 

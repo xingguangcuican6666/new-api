@@ -378,6 +378,7 @@ export type OperationsSettings = {
   DefaultCollapseSidebar: boolean
   DemoSiteEnabled: boolean
   SelfUseModeEnabled: boolean
+  SanitizeUpstreamErrorEnabled: boolean
   QuotaRemindThreshold: string
   SMTPServer: string
   SMTPPort: string
