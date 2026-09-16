@@ -6599,6 +6599,24 @@
     "© 2025 Your Company. All rights reserved.": "© 2025 Your Company. All rights reserved.",
     "、": ", ",
     "，": ", ",
-    "，and ": ", and "
+    "，and ": ", and ",
+    "Split": "Split",
+    "Merge": "Merge",
+    "Split into Single-Key Channels": "Split into Single-Key Channels",
+    "Split Multi-Key Channel": "Split Multi-Key Channel",
+    "Split \"{{name}}\" into one single-key channel per key? The original channel will be disabled.": "Split \"{{name}}\" into one single-key channel per key? The original channel will be disabled.",
+    "Channel split into {{count}} single-key channels": "Channel split into {{count}} single-key channels",
+    "Failed to split channel": "Failed to split channel",
+    "Select at least two channels to merge": "Select at least two channels to merge",
+    "Select at least two channels of the same type to merge": "Select at least two channels of the same type to merge",
+    "Merge selected channels into one multi-key channel": "Merge selected channels into one multi-key channel",
+    "Merge {{count}} selected channels into one multi-key channel? The selected channels will be disabled.": "Merge {{count}} selected channels into one multi-key channel? The selected channels will be disabled.",
+    "Channels merged into one multi-key channel ({{count}} keys)": "Channels merged into one multi-key channel ({{count}} keys)",
+    "Failed to merge channels": "Failed to merge channels",
+    "Merge into Multi-Key Channel": "Merge into Multi-Key Channel",
+    "Success/failure requests within the statistics window": "Success/failure requests within the statistics window",
+    "Time since the last successful request": "Time since the last successful request",
+    "Last success": "Last success",
+    "First-byte latency of the last streaming request": "First-byte latency of the last streaming request"
   }
 }

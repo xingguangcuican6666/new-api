@@ -42,7 +42,7 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 	if generationMs <= 0 {
 		generationMs = latencyMs
 	}
-	Record(Sample{
+	sample := Sample{
 		Model:        info.OriginModelName,
 		Group:        info.UsingGroup,
 		LatencyMs:    latencyMs,
@@ -51,7 +51,9 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 		Success:      success,
 		OutputTokens: outputTokens,
 		GenerationMs: generationMs,
-	})
+	}
+	recordModelLiveStatus(sample)
+	Record(sample)
 }
 
 func Record(sample Sample) {
@@ -182,6 +184,11 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 		if total.generationMs > 0 {
 			avgTps = float64(total.outputTokens) / (float64(total.generationMs) / 1000.0)
 		}
+		failureCount := total.requestCount - total.successCount
+		if failureCount < 0 {
+			failureCount = 0
+		}
+		live, _ := modelLiveStatusSnapshot(name)
 		models = append(models, ModelSummary{
 			ModelName:           name,
 			AvgLatencyMs:        avgLatency,
@@ -189,6 +196,11 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 			AvgTps:              math.Round(avgTps*100) / 100,
 			RecentSuccessSeries: recentSuccessSeries(modelBuckets[name]),
 			RequestCount:        total.requestCount,
+			SuccessCount:        total.successCount,
+			FailureCount:        failureCount,
+			LastSuccessAt:       live.LastSuccessAt,
+			LastRequestAt:       live.LastRequestAt,
+			LastTtftMs:          live.LastTtftMs,
 		})
 	}
 	sort.Slice(models, func(i, j int) bool {

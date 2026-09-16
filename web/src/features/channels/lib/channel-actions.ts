@@ -38,6 +38,8 @@ import {
   editTagChannels,
   testAllChannels,
   updateAllChannelsBalance,
+  splitChannel,
+  mergeChannels,
 } from '../api'
 import { CHANNEL_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import type { ChannelTestResponse, CopyChannelParams } from '../types'
@@ -362,6 +364,63 @@ export async function handleCopyChannel(
     }
   } catch (error) {
     handleServerError(error, i18next.t('Failed to copy channel'))
+  }
+}
+
+/**
+ * Split a multi-key channel into one single-key channel per key
+ */
+export async function handleSplitChannel(
+  id: number,
+  queryClient?: QueryClient,
+  onSuccess?: () => void
+): Promise<void> {
+  try {
+    const response = await splitChannel(id)
+    if (response.success) {
+      toast.success(
+        i18next.t('Channel split into {{count}} single-key channels', {
+          count: response.data?.count ?? 0,
+        })
+      )
+      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      onSuccess?.()
+    } else {
+      handleServerError(response, i18next.t('Failed to split channel'))
+    }
+  } catch (error) {
+    handleServerError(error, i18next.t('Failed to split channel'))
+  }
+}
+
+/**
+ * Merge single-key channels into one multi-key channel
+ */
+export async function handleMergeChannels(
+  ids: number[],
+  queryClient?: QueryClient,
+  onSuccess?: () => void
+): Promise<void> {
+  if (ids.length < 2) {
+    toast.error(i18next.t('Select at least two channels to merge'))
+    return
+  }
+
+  try {
+    const response = await mergeChannels({ ids })
+    if (response.success) {
+      toast.success(
+        i18next.t('Channels merged into one multi-key channel ({{count}} keys)', {
+          count: response.data?.count ?? 0,
+        })
+      )
+      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      onSuccess?.()
+    } else {
+      handleServerError(response, i18next.t('Failed to merge channels'))
+    }
+  } catch (error) {
+    handleServerError(error, i18next.t('Failed to merge channels'))
   }
 }
 

@@ -6599,6 +6599,24 @@
     "© 2025 Your Company. All rights reserved.": "© 2025 Ваша Компания. Все права защищены.",
     "、": ", ",
     "，": ", ",
-    "，and ": " и "
+    "，and ": " и ",
+    "Split": "Разделить",
+    "Merge": "Объединить",
+    "Split into Single-Key Channels": "Разделить на каналы с одним ключом",
+    "Split Multi-Key Channel": "Разделить многоключевой канал",
+    "Split \"{{name}}\" into one single-key channel per key? The original channel will be disabled.": "Разделить «{{name}}» на отдельные каналы по одному ключу? Исходный канал будет отключён.",
+    "Channel split into {{count}} single-key channels": "Канал разделён на {{count}} каналов с одним ключом",
+    "Failed to split channel": "Не удалось разделить канал",
+    "Select at least two channels to merge": "Выберите не менее двух каналов для объединения",
+    "Select at least two channels of the same type to merge": "Выберите не менее двух каналов одного типа для объединения",
+    "Merge selected channels into one multi-key channel": "Объединить выбранные каналы в один многоключевой канал",
+    "Merge {{count}} selected channels into one multi-key channel? The selected channels will be disabled.": "Объединить {{count}} выбранных каналов в один многоключевой? Выбранные каналы будут отключены.",
+    "Channels merged into one multi-key channel ({{count}} keys)": "Каналы объединены в один многоключевой канал ({{count}} ключей)",
+    "Failed to merge channels": "Не удалось объединить каналы",
+    "Merge into Multi-Key Channel": "Объединить в многоключевой канал",
+    "Success/failure requests within the statistics window": "Успешные/неудачные запросы за период статистики",
+    "Time since the last successful request": "Время с последнего успешного запроса",
+    "Last success": "Последний успех",
+    "First-byte latency of the last streaming request": "Задержка первого байта последнего потокового запроса"
   }
 }

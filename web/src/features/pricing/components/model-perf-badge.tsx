@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { memo, useMemo } from 'react'
+import { CircleCheck, CircleX, Clock3, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -24,6 +25,7 @@ import {
   formatThroughput,
   getSuccessRateDotClass,
 } from '@/features/performance-metrics/lib/format'
+import { formatTimestampRelative } from '@/lib/format'
 import type { SuccessRatePoint } from '@/features/performance-metrics/types'
 import { cn } from '@/lib/utils'
 
@@ -32,6 +34,10 @@ export type ModelPerfBadgeData = {
   success_rate: number
   avg_tps: number
   recent_success_series?: SuccessRatePoint[]
+  success_count?: number
+  failure_count?: number
+  last_success_at?: number
+  last_ttft_ms?: number
 }
 
 export interface ModelPerfBadgeProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -39,6 +45,10 @@ export interface ModelPerfBadgeProps extends React.HTMLAttributes<HTMLDivElement
 }
 
 const STATUS_SLOTS = Array.from({ length: 24 }, (_, slot) => slot)
+
+const compactNumberFormat = new Intl.NumberFormat(undefined, {
+  notation: 'compact',
+})
 
 export const ModelPerfBadge = memo(function ModelPerfBadge(
   props: ModelPerfBadgeProps
@@ -55,6 +65,12 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
     Number.isFinite(successRate) &&
     successRate >= 0 &&
     successRate <= 100
+  const successCount = props.perf?.success_count ?? 0
+  const failureCount = props.perf?.failure_count ?? 0
+  const lastSuccessAt = props.perf?.last_success_at ?? 0
+  const lastTtftMs = props.perf?.last_ttft_ms ?? 0
+  const hasUsage =
+    successCount > 0 || failureCount > 0 || lastSuccessAt > 0 || lastTtftMs > 0
   // Hourly points with timestamps, anchored to the client's current hour.
   // Hours without traffic stay gray. Slot 23 is the current, partial hour.
   const statusRates = useMemo(() => {
@@ -73,69 +89,112 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
     <div
       aria-label={t('Performance metrics for the last 24 hours')}
       className={cn(
-        'flex w-full min-w-0 items-center justify-between gap-3',
+        'flex w-full min-w-0 flex-col gap-1.5',
         props.className
       )}
     >
-      <dl className='flex min-w-0 items-start gap-5 text-xs tabular-nums'>
-        <div className='w-24 shrink-0'>
-          <dt
-            title={t('Request success rate sampled over the last 24 hours')}
-            className='text-muted-foreground flex items-center justify-between gap-1 text-[11px] leading-4'
-          >
-            <span>{t('Status')}</span>
-            <span className='font-mono'>
-              {hasSuccessRate ? `${successRate.toFixed(1)}%` : '—%'}
+      <div className='flex w-full min-w-0 items-center justify-between gap-3'>
+        <dl className='flex min-w-0 items-start gap-5 text-xs tabular-nums'>
+          <div className='w-24 shrink-0'>
+            <dt
+              title={t('Request success rate sampled over the last 24 hours')}
+              className='text-muted-foreground flex items-center justify-between gap-1 text-[11px] leading-4'
+            >
+              <span>{t('Status')}</span>
+              <span className='font-mono'>
+                {hasSuccessRate ? `${successRate.toFixed(1)}%` : '—%'}
+              </span>
+            </dt>
+            <dd
+              role='img'
+              aria-label={t(
+                'Recent success-rate samples; gray bars indicate missing data.'
+              )}
+              title={t(
+                'Recent success-rate samples; gray bars indicate missing data.'
+              )}
+              className='mt-1 flex h-3 w-24 items-center justify-between'
+            >
+              {STATUS_SLOTS.map((slot) => {
+                const rate = statusRates[slot]
+                return (
+                  <span
+                    key={slot}
+                    aria-hidden
+                    className={cn(
+                      'h-full w-[3px] shrink-0 rounded-xs',
+                      rate != null &&
+                        Number.isFinite(rate) &&
+                        rate >= 0 &&
+                        rate <= 100
+                        ? getSuccessRateDotClass(rate)
+                        : 'bg-muted-foreground/15'
+                    )}
+                  />
+                )
+              })}
+            </dd>
+          </div>
+          <div title={t('Average latency')} className='shrink-0'>
+            <dt className='text-muted-foreground text-[11px] leading-4'>
+              {t('Latency short')}
+            </dt>
+            <dd className='mt-1 font-mono whitespace-nowrap'>
+              {latencyText === '—' ? '—s' : latencyText}
+            </dd>
+          </div>
+          <div title={t('Throughput')} className='shrink-0'>
+            <dt className='text-muted-foreground text-[11px] leading-4'>
+              {t('Throughput short')}
+            </dt>
+            <dd className='mt-1 font-mono whitespace-nowrap'>
+              {throughputText === '—' ? '—t/s' : throughputText}
+            </dd>
+          </div>
+        </dl>
+        {props.children}
+      </div>
+      {hasUsage && (
+        <div className='text-muted-foreground flex items-center justify-end gap-3 text-[11px] leading-4 tabular-nums'>
+          {successCount > 0 && (
+            <span
+              title={t('Success/failure requests within the statistics window')}
+              className='inline-flex items-center gap-1'
+            >
+              <CircleCheck aria-hidden className='size-3 text-success' />
+              {compactNumberFormat.format(successCount)}
             </span>
-          </dt>
-          <dd
-            role='img'
-            aria-label={t(
-              'Recent success-rate samples; gray bars indicate missing data.'
-            )}
-            title={t(
-              'Recent success-rate samples; gray bars indicate missing data.'
-            )}
-            className='mt-1 flex h-3 w-24 items-center justify-between'
-          >
-            {STATUS_SLOTS.map((slot) => {
-              const rate = statusRates[slot]
-              return (
-                <span
-                  key={slot}
-                  aria-hidden
-                  className={cn(
-                    'h-full w-[3px] shrink-0 rounded-xs',
-                    rate != null &&
-                      Number.isFinite(rate) &&
-                      rate >= 0 &&
-                      rate <= 100
-                      ? getSuccessRateDotClass(rate)
-                      : 'bg-muted-foreground/15'
-                  )}
-                />
-              )
-            })}
-          </dd>
+          )}
+          {failureCount > 0 && (
+            <span
+              title={t('Success/failure requests within the statistics window')}
+              className='inline-flex items-center gap-1'
+            >
+              <CircleX aria-hidden className='size-3 text-destructive' />
+              {compactNumberFormat.format(failureCount)}
+            </span>
+          )}
+          {lastSuccessAt > 0 && (
+            <span
+              title={t('Time since the last successful request')}
+              className='inline-flex items-center gap-1'
+            >
+              <Clock3 aria-hidden className='size-3' />
+              {t('Last success')}{' '}
+              {formatTimestampRelative(lastSuccessAt, 'seconds')}
+            </span>
+          )}
+          {lastTtftMs > 0 && (
+            <span
+              title={t('First-byte latency of the last streaming request')}
+              className='inline-flex items-center gap-1'
+            >
+              <Zap aria-hidden className='size-3' />
+              {formatLatency(lastTtftMs)}
+            </span>
+          )}
         </div>
-        <div title={t('Average latency')} className='shrink-0'>
-          <dt className='text-muted-foreground text-[11px] leading-4'>
-            {t('Latency short')}
-          </dt>
-          <dd className='mt-1 font-mono whitespace-nowrap'>
-            {latencyText === '—' ? '—s' : latencyText}
-          </dd>
-        </div>
-        <div title={t('Throughput')} className='shrink-0'>
-          <dt className='text-muted-foreground text-[11px] leading-4'>
-            {t('Throughput short')}
-          </dt>
-          <dd className='mt-1 font-mono whitespace-nowrap'>
-            {throughputText === '—' ? '—t/s' : throughputText}
-          </dd>
-        </div>
-      </dl>
-      {props.children}
+      )}
     </div>
   )
 })

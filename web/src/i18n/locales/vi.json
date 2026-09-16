@@ -6599,6 +6599,24 @@
     "© 2025 Your Company. All rights reserved.": "© 2025 Công ty của bạn. Mọi quyền được bảo lưu.",
     "、": ", ",
     "，": ", ",
-    "，and ": " và "
+    "，and ": " và ",
+    "Split": "Tách",
+    "Merge": "Gộp",
+    "Split into Single-Key Channels": "Tách thành kênh một khóa",
+    "Split Multi-Key Channel": "Tách kênh nhiều khóa",
+    "Split \"{{name}}\" into one single-key channel per key? The original channel will be disabled.": "Tách \"{{name}}\" thành các kênh một khóa theo từng khóa? Kênh gốc sẽ bị vô hiệu hóa.",
+    "Channel split into {{count}} single-key channels": "Đã tách kênh thành {{count}} kênh một khóa",
+    "Failed to split channel": "Tách kênh thất bại",
+    "Select at least two channels to merge": "Chọn ít nhất hai kênh để gộp",
+    "Select at least two channels of the same type to merge": "Chọn ít nhất hai kênh cùng loại để gộp",
+    "Merge selected channels into one multi-key channel": "Gộp các kênh đã chọn thành một kênh nhiều khóa",
+    "Merge {{count}} selected channels into one multi-key channel? The selected channels will be disabled.": "Gộp {{count}} kênh đã chọn thành một kênh nhiều khóa? Các kênh đã chọn sẽ bị vô hiệu hóa.",
+    "Channels merged into one multi-key channel ({{count}} keys)": "Đã gộp các kênh thành một kênh nhiều khóa ({{count}} khóa)",
+    "Failed to merge channels": "Gộp kênh thất bại",
+    "Merge into Multi-Key Channel": "Gộp thành kênh nhiều khóa",
+    "Success/failure requests within the statistics window": "Số yêu cầu thành công/thất bại trong cửa sổ thống kê",
+    "Time since the last successful request": "Thời gian kể từ yêu cầu thành công gần nhất",
+    "Last success": "Thành công cuối",
+    "First-byte latency of the last streaming request": "Độ trễ byte đầu tiên của yêu cầu phát trực tuyến gần nhất"
   }
 }

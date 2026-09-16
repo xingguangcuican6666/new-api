@@ -18,10 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQueryClient } from '@tanstack/react-query'
 import { type Table } from '@tanstack/react-table'
-import { Power, PowerOff, Tag, Trash2 } from 'lucide-react'
+import { Merge, Power, PowerOff, Tag, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
@@ -45,6 +46,7 @@ import {
   handleBatchDisable,
   handleBatchEnable,
   handleBatchSetTag,
+  handleMergeChannels,
 } from '../lib'
 import type { Channel } from '../types'
 
@@ -59,6 +61,7 @@ export function DataTableBulkActions<TData>({
   const queryClient = useQueryClient()
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false)
   const [tagValue, setTagValue] = useState('')
   const currentUser = useAuthStore((s) => s.auth.user)
   const canEditSensitive = hasPermission(
@@ -77,6 +80,19 @@ export function DataTableBulkActions<TData>({
 
     return ids
   }, [])
+  const canMerge =
+    selectedIds.length >= 2 &&
+    selectedRows.every(
+      (row) => (row.original as Channel).type === (selectedRows[0].original as Channel).type
+    )
+
+  const handleMergeAll = () => {
+    if (!canEditSensitive || !canMerge) return
+    handleMergeChannels(selectedIds, queryClient, () => {
+      setShowMergeConfirm(false)
+      handleClearSelection()
+    })
+  }
 
   const handleClearSelection = () => {
     table.resetRowSelection()
@@ -171,6 +187,38 @@ export function DataTableBulkActions<TData>({
           </TooltipTrigger>
           <TooltipContent>
             <p>{t('Set tag for selected channels')}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant='outline'
+                size='icon'
+                onClick={() => setShowMergeConfirm(true)}
+                disabled={!canMerge || !canEditSensitive}
+                className='size-8'
+                aria-label={t('Merge selected channels into one multi-key channel')}
+                title={
+                  canMerge
+                    ? t('Merge selected channels into one multi-key channel')
+                    : t('Select at least two channels of the same type to merge')
+                }
+              />
+            }
+          >
+            <Merge />
+            <span className='sr-only'>
+              {t('Merge selected channels into one multi-key channel')}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>
+              {canMerge
+                ? t('Merge selected channels into one multi-key channel')
+                : t('Select at least two channels of the same type to merge')}
+            </p>
           </TooltipContent>
         </Tooltip>
 
@@ -286,6 +334,19 @@ export function DataTableBulkActions<TData>({
       >
         {' '}
       </Dialog>
+
+      {/* Merge Confirmation Dialog */}
+      <ConfirmDialog
+        open={showMergeConfirm}
+        onOpenChange={setShowMergeConfirm}
+        title={t('Merge into Multi-Key Channel')}
+        desc={t(
+          'Merge {{count}} selected channels into one multi-key channel? The selected channels will be disabled.',
+          { count: selectedIds.length }
+        )}
+        confirmText={t('Merge')}
+        handleConfirm={handleMergeAll}
+      />
     </>
   )
 }

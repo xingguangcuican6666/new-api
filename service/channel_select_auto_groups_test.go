@@ -134,13 +134,13 @@ func TestCacheGetRandomSatisfiedChannelServesErrorRateCooldownChannelAsLastResor
 	createChannelSelectAutoGroupsChannel(t, db, 2201, "default", modelName)
 	model.InitChannelCache()
 
-	channelErrorWindowsMu.Lock()
-	channelErrorWindows = make(map[int]*channelErrorWindow)
-	channelErrorWindowsMu.Unlock()
+	channelCooldownStatesMu.Lock()
+	channelCooldownStates = make(map[channelModelKey]*channelModelState)
+	channelCooldownStatesMu.Unlock()
 	t.Cleanup(func() {
-		channelErrorWindowsMu.Lock()
-		channelErrorWindows = make(map[int]*channelErrorWindow)
-		channelErrorWindowsMu.Unlock()
+		channelCooldownStatesMu.Lock()
+		channelCooldownStates = make(map[channelModelKey]*channelModelState)
+		channelCooldownStatesMu.Unlock()
 	})
 
 	gin.SetMode(gin.TestMode)
@@ -158,14 +158,11 @@ func TestCacheGetRandomSatisfiedChannelServesErrorRateCooldownChannelAsLastResor
 		}
 	}
 
-	// Fill the window with 25/30 failures: the error-rate cooldown is armed.
+	// Five consecutive failures arm the per-(channel, model) cooldown.
 	for i := 0; i < 5; i++ {
-		RecordChannelAttemptOutcome(2201, false)
+		RecordChannelAttemptOutcome(2201, modelName, true)
 	}
-	for i := 0; i < 25; i++ {
-		RecordChannelAttemptOutcome(2201, true)
-	}
-	require.True(t, ChannelInErrorCooldown(2201))
+	require.True(t, ChannelInErrorCooldown(2201, modelName))
 
 	// The cooled channel is the only candidate: skipping it would strand the
 	// request, so it still serves.

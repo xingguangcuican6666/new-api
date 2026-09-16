@@ -59,6 +59,12 @@ type ModelSummary struct {
 	AvgTps              float64            `json:"avg_tps"`
 	RecentSuccessSeries []SuccessRatePoint `json:"recent_success_series,omitempty"`
 	RequestCount        int64              `json:"-"`
+	SuccessCount        int64              `json:"success_count"`
+	FailureCount        int64              `json:"failure_count"`
+	// Live per-model state since process start (not persisted):
+	LastSuccessAt int64 `json:"last_success_at"` // unix seconds, 0 = none since startup
+	LastRequestAt int64 `json:"last_request_at"` // unix seconds, 0 = none since startup
+	LastTtftMs    int64 `json:"last_ttft_ms"`    // 0 = unknown / last request was non-stream
 }
 
 type SummaryAllResult struct {

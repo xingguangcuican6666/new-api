@@ -6599,6 +6599,24 @@
     "© 2025 Your Company. All rights reserved.": "© 2025 您的公司。保留所有權利。",
     "、": "、",
     "，": "，",
-    "，and ": "，並"
+    "，and ": "，並",
+    "Split": "拆分",
+    "Merge": "合併",
+    "Split into Single-Key Channels": "拆分為單密鑰渠道",
+    "Split Multi-Key Channel": "拆分多密鑰渠道",
+    "Split \"{{name}}\" into one single-key channel per key? The original channel will be disabled.": "將「{{name}}」按密鑰拆分為多個單密鑰渠道？原渠道將被停用。",
+    "Channel split into {{count}} single-key channels": "渠道已拆分為 {{count}} 個單密鑰渠道",
+    "Failed to split channel": "拆分渠道失敗",
+    "Select at least two channels to merge": "請至少選擇兩個渠道進行合併",
+    "Select at least two channels of the same type to merge": "請至少選擇兩個同類型渠道才能合併",
+    "Merge selected channels into one multi-key channel": "將選中渠道合併為一個多密鑰渠道",
+    "Merge {{count}} selected channels into one multi-key channel? The selected channels will be disabled.": "將選中的 {{count}} 個渠道合併為一個多密鑰渠道？選中渠道將被停用。",
+    "Channels merged into one multi-key channel ({{count}} keys)": "渠道已合併為一個多密鑰渠道（{{count}} 個密鑰）",
+    "Failed to merge channels": "合併渠道失敗",
+    "Merge into Multi-Key Channel": "合併為多密鑰渠道",
+    "Success/failure requests within the statistics window": "統計區間內的成功/失敗請求數",
+    "Time since the last successful request": "距上次成功請求的時間",
+    "Last success": "最後成功",
+    "First-byte latency of the last streaming request": "最後一次串流請求的首字延遲"
   }
 }

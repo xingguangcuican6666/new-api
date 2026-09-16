@@ -1506,6 +1506,88 @@ func CopyChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"id": clone.Id}})
 }
 
+// SplitChannel divides a multi-key channel into one single-key channel per
+// key, copying every setting; the source channel is disabled afterwards so
+// the split actually replaces it.
+func SplitChannel(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的渠道 ID"})
+		return
+	}
+	source, err := model.GetChannelById(id, true)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "渠道不存在"})
+		return
+	}
+	children := source.SplitTargets()
+	if len(children) == 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "渠道不是多密钥渠道（或仅有一个密钥），无需拆分"})
+		return
+	}
+	if err := model.BatchInsertChannels(children); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.UpdateChannelStatus(id, "", common.ChannelStatusManuallyDisabled, fmt.Sprintf("已拆分为 %d 个单密钥渠道", len(children)))
+	model.InitChannelCache()
+	recordManageAudit(c, "channel.split", map[string]any{
+		"id":    id,
+		"name":  source.Name,
+		"count": len(children),
+	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"count": len(children)}})
+}
+
+// MergeChannelsRequest is the body of the multi-key merge endpoint.
+type MergeChannelsRequest struct {
+	IDs          []int                 `json:"ids"`
+	Name         string                `json:"name"`
+	MultiKeyMode constant.MultiKeyMode `json:"multi_key_mode"`
+}
+
+// MergeChannels combines the selected single-key channels into one multi-key
+// channel; the source channels are disabled afterwards.
+func MergeChannels(c *gin.Context) {
+	var req MergeChannelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(req.IDs) < 2 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请选择至少两个渠道进行合并"})
+		return
+	}
+	channels := make([]*model.Channel, 0, len(req.IDs))
+	for _, id := range req.IDs {
+		channel, err := model.GetChannelById(id, true)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": fmt.Sprintf("渠道 #%d 不存在", id)})
+			return
+		}
+		channels = append(channels, channel)
+	}
+	merged, err := model.MergeTarget(channels, req.Name, req.MultiKeyMode)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	if err := model.BatchInsertChannels([]model.Channel{*merged}); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	for _, channel := range channels {
+		model.UpdateChannelStatus(channel.Id, "", common.ChannelStatusManuallyDisabled, fmt.Sprintf("已合并为多密钥渠道「%s」", merged.Name))
+	}
+	model.InitChannelCache()
+	recordManageAudit(c, "channel.merge", map[string]any{
+		"ids":      req.IDs,
+		"name":     merged.Name,
+		"keyCount": merged.ChannelInfo.MultiKeySize,
+	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"count": merged.ChannelInfo.MultiKeySize}})
+}
+
 // MultiKeyManageRequest represents the request for multi-key management operations
 type MultiKeyManageRequest struct {
 	ChannelId int    `json:"channel_id"`

@@ -111,13 +111,13 @@ func (p *RetryParam) ResetRetryNextTry() {
 //	         分组B, 优先级1
 //
 // channelExclusionFilters builds the channel-id exclusion filter applied to
-// selection: the per-user failure breaker is a hard exclusion, the error-rate
+// selection: the per-user failure breaker is a hard exclusion, the per-model
 // cooldown a soft one that the caller may drop as a last resort.
 func channelExclusionFilters(param *RetryParam, includeCooldown bool) []dto.ChannelFilter {
 	filters := GetChannelConstraints(param.Ctx).Filters
 	excluded := UserExcludedChannelIDs(param.Ctx.GetInt("id"))
 	if includeCooldown {
-		excluded = append(excluded, CooldownExcludedChannelIds()...)
+		excluded = append(excluded, CooldownExcludedChannelIds(param.ModelName)...)
 	}
 	if len(excluded) > 0 {
 		filters = append(slices.Clone(filters), dto.ChannelFilter{
@@ -257,12 +257,12 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 		return channel, selectGroup, err
 	}
 
-	// The candidate pool was emptied by exclusions. The error-rate cooldown is
-	// advisory and must not strand the request when the skipped channels are
-	// the only ones able to serve it: retry while ignoring the cooldown, so a
-	// skipped channel is only bypassed while other channels remain available.
-	// The per-user breaker keeps its hard semantics. The auto-group state
-	// mutated by the first pass is restored before retrying.
+	// The candidate pool was emptied by exclusions. The cooldown is advisory
+	// and must not strand the request when the skipped channels are the only
+	// ones able to serve it: retry while ignoring the cooldown, so a skipped
+	// channel is only bypassed while other channels remain available. The
+	// per-user breaker keeps its hard semantics. The auto-group state mutated
+	// by the first pass is restored before retrying.
 	entryRetry := param.GetRetry()
 	entryAutoGroupIndex, hadAutoGroupIndex := common.GetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex)
 	param.SetRetry(entryRetry)
@@ -273,7 +273,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	}
 	channel, selectGroup, err = selectChannelWithFilters(param, channelExclusionFilters(param, false))
 	if err == nil && channel != nil {
-		logger.LogWarn(param.Ctx, "error-rate cooldown channel served as last resort: model=%s channel=#%d", param.ModelName, channel.Id)
+		logger.LogWarn(param.Ctx, "cooldown channel served as last resort: model=%s channel=#%d", param.ModelName, channel.Id)
 	}
 	return channel, selectGroup, err
 }

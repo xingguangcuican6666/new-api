@@ -134,7 +134,7 @@ func Distribute() func(c *gin.Context) {
 							// The user's failure breaker and the channel error-rate
 							// cooldown outrank channel affinity.
 							affinitySatisfied = !service.IsUserChannelExcluded(c.GetInt("id"), preferred.Id) &&
-								!service.ChannelInErrorCooldown(preferred.Id)
+								!service.ChannelInErrorCooldown(preferred.Id, modelRequest.Model)
 						}
 					}
 					if affinitySatisfied {

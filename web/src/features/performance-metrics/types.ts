@@ -52,6 +52,13 @@ export type PerfModelSummary = {
   avg_tps: number
   recent_success_series?: SuccessRatePoint[]
   request_count?: number
+  success_count?: number
+  failure_count?: number
+  /** Live state since process start (unix seconds, 0 = none) */
+  last_success_at?: number
+  last_request_at?: number
+  /** First-byte latency of the last streaming request (ms, 0 = unknown) */
+  last_ttft_ms?: number
 }
 
 export type PerfSummaryAllData = {

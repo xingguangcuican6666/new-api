@@ -29,6 +29,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createJSONStorage } from 'zustand/middleware'
 
+import { formatLatency } from '@/features/performance-metrics/lib/format'
 import { api } from '@/lib/api'
 import {
   DEFAULT_CURRENCY_CONFIG,
@@ -602,5 +603,69 @@ describe('model cards', () => {
       expect(slot.classList.contains('bg-muted-foreground/15')).toBe(true)
     })
     vi.useRealTimers()
+  })
+})
+
+const compactNumberFormat = new Intl.NumberFormat(undefined, {
+  notation: 'compact',
+})
+
+describe('model card usage metrics', () => {
+  it('renders success/failure counts, last success age and last first-byte latency', () => {
+    render(
+      <ModelCard
+        model={pricingModel()}
+        onClick={vi.fn()}
+        perf={{
+          avg_latency_ms: 1200,
+          avg_tps: 42,
+          success_rate: 98,
+          success_count: 1200,
+          failure_count: 12,
+          last_success_at: Math.floor(Date.now() / 1000) - 120,
+          last_ttft_ms: 620,
+        }}
+      />
+    )
+
+    const counters = screen.getAllByTitle(
+      'Success/failure requests within the statistics window'
+    )
+    expect(counters).toHaveLength(2)
+    expect(counters[0].textContent).toContain(
+      compactNumberFormat.format(1200)
+    )
+    expect(counters[1].textContent).toContain('12')
+
+    expect(
+      screen.getByTitle('Time since the last successful request').textContent
+    ).toContain('Last success')
+
+    expect(
+      screen.getByTitle('First-byte latency of the last streaming request')
+        .textContent
+    ).toContain(formatLatency(620))
+  })
+
+  it('hides the usage row when no live metrics exist', () => {
+    render(
+      <ModelCard
+        model={pricingModel()}
+        onClick={vi.fn()}
+        perf={{ avg_latency_ms: 1200, avg_tps: 42, success_rate: 100 }}
+      />
+    )
+
+    expect(
+      screen.queryByTitle(
+        'Success/failure requests within the statistics window'
+      )
+    ).toBeNull()
+    expect(
+      screen.queryByTitle('Time since the last successful request')
+    ).toBeNull()
+    expect(
+      screen.queryByTitle('First-byte latency of the last streaming request')
+    ).toBeNull()
   })
 })

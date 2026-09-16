@@ -310,6 +310,40 @@ export async function copyChannel(
   return res.data
 }
 
+export type SplitChannelResponse = {
+  success: boolean
+  message?: string
+  data?: { count: number }
+}
+
+/**
+ * Split a multi-key channel into one single-key channel per key
+ */
+export async function splitChannel(id: number): Promise<SplitChannelResponse> {
+  const res = await api.post(
+    `/api/channel/${id}/split`,
+    null,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export type MergeChannelsParams = {
+  ids: number[]
+  name?: string
+  multi_key_mode?: 'random' | 'polling'
+}
+
+/**
+ * Merge single-key channels into one multi-key channel
+ */
+export async function mergeChannels(
+  params: MergeChannelsParams
+): Promise<SplitChannelResponse> {
+  const res = await api.post('/api/channel/merge', params, channelActionConfig())
+  return res.data
+}
+
 /**
  * Fix channel abilities
  */

@@ -6599,6 +6599,24 @@
     "© 2025 Your Company. All rights reserved.": "© 2025 Votre entreprise. Tous droits réservés.",
     "、": ", ",
     "，": ", ",
-    "，and ": " et "
+    "，and ": " et ",
+    "Split": "Diviser",
+    "Merge": "Fusionner",
+    "Split into Single-Key Channels": "Diviser en canaux à clé unique",
+    "Split Multi-Key Channel": "Diviser le canal multi-clés",
+    "Split \"{{name}}\" into one single-key channel per key? The original channel will be disabled.": "Diviser « {{name}} » en un canal à clé unique par clé ? Le canal d’origine sera désactivé.",
+    "Channel split into {{count}} single-key channels": "Canal divisé en {{count}} canaux à clé unique",
+    "Failed to split channel": "Échec de la division du canal",
+    "Select at least two channels to merge": "Sélectionnez au moins deux canaux à fusionner",
+    "Select at least two channels of the same type to merge": "Sélectionnez au moins deux canaux du même type à fusionner",
+    "Merge selected channels into one multi-key channel": "Fusionner les canaux sélectionnés en un canal multi-clés",
+    "Merge {{count}} selected channels into one multi-key channel? The selected channels will be disabled.": "Fusionner les {{count}} canaux sélectionnés en un canal multi-clés ? Les canaux sélectionnés seront désactivés.",
+    "Channels merged into one multi-key channel ({{count}} keys)": "Canaux fusionnés en un canal multi-clés ({{count}} clés)",
+    "Failed to merge channels": "Échec de la fusion des canaux",
+    "Merge into Multi-Key Channel": "Fusionner en canal multi-clés",
+    "Success/failure requests within the statistics window": "Requêtes réussies/échouées dans la fenêtre de statistiques",
+    "Time since the last successful request": "Temps depuis la dernière requête réussie",
+    "Last success": "Dernier succès",
+    "First-byte latency of the last streaming request": "Latence du premier octet de la dernière requête en streaming"
   }
 }

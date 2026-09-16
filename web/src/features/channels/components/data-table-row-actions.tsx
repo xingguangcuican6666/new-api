@@ -34,6 +34,7 @@ import {
   RefreshCw,
   Loader2,
   SlidersHorizontal,
+  Split,
 } from 'lucide-react'
 import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -64,6 +65,7 @@ import { MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   channelsQueryKeys,
   handleDeleteChannel,
+  handleSplitChannel,
   handleTestChannel,
   handleToggleChannelStatus,
   isChannelEnabled,
@@ -86,6 +88,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.auth.user)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [splitConfirmOpen, setSplitConfirmOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
 
@@ -376,6 +379,23 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
+          {/* Split into single-key channels (only for multi-key channels) */}
+          {isMultiKey && (
+            <DropdownMenuItem
+              disabled={!canEditSensitive}
+              onSelect={(e) => {
+                e.preventDefault()
+                if (!canEditSensitive) return
+                setSplitConfirmOpen(true)
+              }}
+            >
+              {t('Split into Single-Key Channels')}
+              <DropdownMenuShortcut>
+                <Split size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+
           <DropdownMenuSeparator />
 
           {/* Delete */}
@@ -410,6 +430,23 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           if (!canEditSensitive) return
           handleDeleteChannel(channel.id, queryClient)
           setDeleteConfirmOpen(false)
+        }}
+      />
+
+      <ConfirmDialog
+        open={splitConfirmOpen}
+        onOpenChange={setSplitConfirmOpen}
+        title={t('Split Multi-Key Channel')}
+        desc={t(
+          'Split "{{name}}" into one single-key channel per key? The original channel will be disabled.',
+          { name: channel.name }
+        )}
+        confirmText={t('Split')}
+        handleConfirm={() => {
+          if (!canEditSensitive) return
+          handleSplitChannel(channel.id, queryClient, () =>
+            setSplitConfirmOpen(false)
+          )
         }}
       />
     </div>

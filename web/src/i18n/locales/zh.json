@@ -6599,6 +6599,24 @@
     "© 2025 Your Company. All rights reserved.": "© 2025 您的公司。保留所有权利。",
     "、": "、",
     "，": "，",
-    "，and ": "，并"
+    "，and ": "，并",
+    "Split": "拆分",
+    "Merge": "合并",
+    "Split into Single-Key Channels": "拆分为单密钥渠道",
+    "Split Multi-Key Channel": "拆分多密钥渠道",
+    "Split \"{{name}}\" into one single-key channel per key? The original channel will be disabled.": "将「{{name}}」按密钥拆分为多个单密钥渠道？原渠道将被禁用。",
+    "Channel split into {{count}} single-key channels": "渠道已拆分为 {{count}} 个单密钥渠道",
+    "Failed to split channel": "拆分渠道失败",
+    "Select at least two channels to merge": "请至少选择两个渠道进行合并",
+    "Select at least two channels of the same type to merge": "请至少选择两个同类型渠道才能合并",
+    "Merge selected channels into one multi-key channel": "将选中渠道合并为一个多密钥渠道",
+    "Merge {{count}} selected channels into one multi-key channel? The selected channels will be disabled.": "将选中的 {{count}} 个渠道合并为一个多密钥渠道？选中渠道将被禁用。",
+    "Channels merged into one multi-key channel ({{count}} keys)": "渠道已合并为一个多密钥渠道（{{count}} 个密钥）",
+    "Failed to merge channels": "合并渠道失败",
+    "Merge into Multi-Key Channel": "合并为多密钥渠道",
+    "Success/failure requests within the statistics window": "统计窗口内的成功/失败请求数",
+    "Time since the last successful request": "距上次成功请求的时间",
+    "Last success": "最后成功",
+    "First-byte latency of the last streaming request": "最后一次流式请求的首字延迟"
   }
 }

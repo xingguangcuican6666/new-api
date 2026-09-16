@@ -258,8 +258,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = relayHandler(c, relayInfo)
 		}
 
-		// Every real upstream attempt feeds the channel error-rate window.
-		service.RecordChannelAttemptOutcome(channel.Id, newAPIError != nil)
+		// Every real upstream attempt feeds the per-(channel, model) cooldown
+		// breaker; a slow streaming first byte additionally arms the skip.
+		service.RecordChannelAttemptOutcome(channel.Id, relayInfo.OriginModelName, newAPIError != nil)
+		if newAPIError == nil && relayInfo.IsStream && relayInfo.HasSendResponse() {
+			service.RecordChannelSlowFirstByte(channel.Id, relayInfo.OriginModelName, relayInfo.FirstResponseTime.Sub(relayInfo.StartTime))
+		}
 
 		// The first attempt is the user's real request hitting its routed
 		// channel; gateway-side retries (and mapping-queue attempts) below
@@ -789,10 +793,10 @@ func executeTaskSubmissionWith(
 			taskErr = service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
 			break
 		}
-		// Every real upstream attempt feeds the channel error-rate window;
-		// local failures never reached the upstream and do not count.
+		// Every real upstream attempt feeds the per-(channel, model) cooldown
+		// breaker; local failures never reached the upstream and do not count.
 		if taskErr == nil || !taskErr.LocalError {
-			service.RecordChannelAttemptOutcome(channel.Id, taskErr != nil)
+			service.RecordChannelAttemptOutcome(channel.Id, relayInfo.OriginModelName, taskErr != nil)
 		}
 		// The first attempt is the user's real request; only upstream failures
 		// of that attempt feed the user breaker (local errors are not the
