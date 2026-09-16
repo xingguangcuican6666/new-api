@@ -270,14 +270,21 @@ func Register(c *gin.Context) {
 		return
 	}
 	affCode := strings.TrimSpace(user.AffCode)
-	if affCode == "" {
-		common.ApiErrorI18n(c, i18n.MsgUserAffCodeEmpty)
-		return
-	}
-	inviterId, err := model.GetUserIdByAffCode(affCode)
-	if err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserAffCodeInvalid)
-		return
+	var inviterId int
+	if common.InviteCodeRegisterEnabled {
+		if affCode == "" {
+			common.ApiErrorI18n(c, i18n.MsgUserAffCodeEmpty)
+			return
+		}
+		id, err := model.GetUserIdByAffCode(affCode)
+		if err != nil {
+			common.ApiErrorI18n(c, i18n.MsgUserAffCodeInvalid)
+			return
+		}
+		inviterId = id
+	} else if affCode != "" {
+		// 邀请码选填时尽力关联邀请人；无效邀请码不阻断注册
+		inviterId, _ = model.GetUserIdByAffCode(affCode)
 	}
 	cleanUser := model.User{
 		Username:    user.Username,

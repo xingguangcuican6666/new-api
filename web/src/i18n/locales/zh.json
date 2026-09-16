@@ -6617,6 +6617,10 @@
     "Success/failure requests within the statistics window": "统计窗口内的成功/失败请求数",
     "Time since the last successful request": "距上次成功请求的时间",
     "Last success": "最后成功",
-    "First-byte latency of the last streaming request": "最后一次流式请求的首字延迟"
+    "First-byte latency of the last streaming request": "最后一次流式请求的首字延迟",
+    "Invite Code Registration": "邀请码注册",
+    "Require a valid invitation code to register": "注册时必须填写有效的邀请码",
+    "Invitation code": "邀请码",
+    "Please enter an invitation code": "请输入邀请码"
   }
 }

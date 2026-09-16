@@ -6617,6 +6617,10 @@
     "Success/failure requests within the statistics window": "統計期間内の成功/失敗リクエスト数",
     "Time since the last successful request": "最後に成功したリクエストからの経過時間",
     "Last success": "最終成功",
-    "First-byte latency of the last streaming request": "最後のストリーミングリクエストの初回バイト遅延"
+    "First-byte latency of the last streaming request": "最後のストリーミングリクエストの初回バイト遅延",
+    "Invite Code Registration": "招待コード登録",
+    "Require a valid invitation code to register": "登録時に有効な招待コードを必須にする",
+    "Invitation code": "招待コード",
+    "Please enter an invitation code": "招待コードを入力してください"
   }
 }

@@ -150,6 +150,7 @@ export type SiteSettings = {
 export type AuthSettings = {
   PasswordLoginEnabled: boolean
   PasswordRegisterEnabled: boolean
+  InviteCodeRegisterEnabled: boolean
   EmailVerificationEnabled: boolean
   RegisterEnabled: boolean
   DefaultRegistrationGroup: string

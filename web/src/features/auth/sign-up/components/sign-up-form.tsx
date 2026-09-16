@@ -101,6 +101,7 @@ export function SignUpForm({
 
   const emailValue = form.watch('email')
   const emailVerificationRequired = !!status?.email_verification
+  const inviteCodeRequired = !!status?.invite_code_register_enabled
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
   const requiresLegalConsent = hasUserAgreement || hasPrivacyPolicy
@@ -144,6 +145,14 @@ export function SignUpForm({
   async function onSubmit(data: z.infer<typeof registerFormSchema>) {
     if (requiresLegalConsent && !agreedToLegal) {
       toast.error(legalConsentErrorMessage)
+      return
+    }
+
+    if (inviteCodeRequired && !data.aff_code.trim()) {
+      form.setError('aff_code', {
+        type: 'manual',
+        message: t('Please enter an invitation code'),
+      })
       return
     }
 
@@ -301,26 +310,28 @@ export function SignUpForm({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name='aff_code'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Invitation code')}</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder={t('Please enter an invitation code')}
-                  {...field}
-                  onChange={(event) => {
-                    field.onChange(event)
-                    saveAffiliateCode(event.target.value.trim())
-                  }}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {inviteCodeRequired && (
+          <FormField
+            control={form.control}
+            name='aff_code'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Invitation code')}</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder={t('Please enter an invitation code')}
+                    {...field}
+                    onChange={(event) => {
+                      field.onChange(event)
+                      saveAffiliateCode(event.target.value.trim())
+                    }}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         {/* Email Verification Section */}
         {emailVerificationRequired && (

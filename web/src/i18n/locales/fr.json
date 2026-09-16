@@ -6617,6 +6617,10 @@
     "Success/failure requests within the statistics window": "Requêtes réussies/échouées dans la fenêtre de statistiques",
     "Time since the last successful request": "Temps depuis la dernière requête réussie",
     "Last success": "Dernier succès",
-    "First-byte latency of the last streaming request": "Latence du premier octet de la dernière requête en streaming"
+    "First-byte latency of the last streaming request": "Latence du premier octet de la dernière requête en streaming",
+    "Invite Code Registration": "Inscription par code d’invitation",
+    "Require a valid invitation code to register": "Exiger un code d’invitation valide pour s’inscrire",
+    "Invitation code": "Code d’invitation",
+    "Please enter an invitation code": "Veuillez saisir un code d’invitation"
   }
 }

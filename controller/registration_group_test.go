@@ -41,10 +41,13 @@ func setupRegistrationGroupControllerTest(t *testing.T) {
 	})
 
 	previousRegister, previousPasswordRegister := common.RegisterEnabled, common.PasswordRegisterEnabled
+	previousInviteCode := common.InviteCodeRegisterEnabled
 	common.RegisterEnabled = true
 	common.PasswordRegisterEnabled = true
+	common.InviteCodeRegisterEnabled = true
 	t.Cleanup(func() {
 		common.RegisterEnabled, common.PasswordRegisterEnabled = previousRegister, previousPasswordRegister
+		common.InviteCodeRegisterEnabled = previousInviteCode
 	})
 }
 
@@ -150,6 +153,37 @@ func TestRegisterAcceptsValidTrimmedInvitationCode(t *testing.T) {
 	require.NoError(t, model.DB.First(&created, "username = ?", "invited-user").Error)
 	assert.Equal(t, inviter.Id, created.InviterId)
 	assert.Equal(t, "free", created.Group)
+}
+
+func TestRegisterInviteCodeOptionalWhenDisabled(t *testing.T) {
+	setupRegistrationGroupControllerTest(t)
+	require.NoError(t, setting.ApplyRegistrationGroupConfiguration("free", ratio_setting.GetGroupRatioCopy()))
+	inviter := createRegistrationInviter(t, "optional-inviter", "optional-invite")
+	common.InviteCodeRegisterEnabled = false
+
+	// Without the toggle, registration succeeds with no inviter attached.
+	recorder := performRegisterRequest(t, `{"username":"no-invite","password":"password-1234"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+	var noInvite model.User
+	require.NoError(t, model.DB.Where("username = ?", "no-invite").First(&noInvite).Error)
+	assert.Zero(t, noInvite.InviterId)
+
+	// An invalid code does not block registration and attributes nobody.
+	recorder = performRegisterRequest(t, `{"username":"bad-invite","password":"password-1234","aff_code":"not-found"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+	var badInvite model.User
+	require.NoError(t, model.DB.Where("username = ?", "bad-invite").First(&badInvite).Error)
+	assert.Zero(t, badInvite.InviterId)
+
+	// A valid code still attributes the inviter.
+	recorder = performRegisterRequest(t, `{"username":"linked-invite","password":"password-1234","aff_code":"optional-invite"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+	var linked model.User
+	require.NoError(t, model.DB.Where("username = ?", "linked-invite").First(&linked).Error)
+	assert.Equal(t, inviter.Id, linked.InviterId)
 }
 
 func TestCreateUserKeepsDefaultGroup(t *testing.T) {

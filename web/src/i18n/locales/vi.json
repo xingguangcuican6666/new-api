@@ -6617,6 +6617,10 @@
     "Success/failure requests within the statistics window": "Số yêu cầu thành công/thất bại trong cửa sổ thống kê",
     "Time since the last successful request": "Thời gian kể từ yêu cầu thành công gần nhất",
     "Last success": "Thành công cuối",
-    "First-byte latency of the last streaming request": "Độ trễ byte đầu tiên của yêu cầu phát trực tuyến gần nhất"
+    "First-byte latency of the last streaming request": "Độ trễ byte đầu tiên của yêu cầu phát trực tuyến gần nhất",
+    "Invite Code Registration": "Đăng ký bằng mã mời",
+    "Require a valid invitation code to register": "Yêu cầu mã mời hợp lệ khi đăng ký",
+    "Invitation code": "Mã mời",
+    "Please enter an invitation code": "Vui lòng nhập mã mời"
   }
 }

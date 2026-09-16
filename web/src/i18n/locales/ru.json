@@ -6617,6 +6617,10 @@
     "Success/failure requests within the statistics window": "Успешные/неудачные запросы за период статистики",
     "Time since the last successful request": "Время с последнего успешного запроса",
     "Last success": "Последний успех",
-    "First-byte latency of the last streaming request": "Задержка первого байта последнего потокового запроса"
+    "First-byte latency of the last streaming request": "Задержка первого байта последнего потокового запроса",
+    "Invite Code Registration": "Регистрация по коду приглашения",
+    "Require a valid invitation code to register": "Требовать действительный код приглашения для регистрации",
+    "Invitation code": "Код приглашения",
+    "Please enter an invitation code": "Введите код приглашения"
   }
 }

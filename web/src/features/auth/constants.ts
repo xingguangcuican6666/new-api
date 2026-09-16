@@ -32,7 +32,9 @@ export const loginFormSchema = z.object({
 export const registerFormSchema = z
   .object({
     username: z.string().min(1, 'Please enter your username'),
-    aff_code: z.string().trim().min(1, 'Please enter an invitation code'),
+    // Required only when the server enforces invite codes (checked at submit);
+    // optional otherwise so referral links can still attribute sign-ups.
+    aff_code: z.string().trim(),
     email: z.string().optional(),
     password: accountPasswordSchema,
     confirmPassword: z.string().min(1, 'Please confirm your password'),

@@ -32,6 +32,7 @@ const clients: QueryClient[] = []
 const defaultValues = {
   PasswordLoginEnabled: true,
   PasswordRegisterEnabled: true,
+  InviteCodeRegisterEnabled: true,
   EmailVerificationEnabled: false,
   RegisterEnabled: false,
   DefaultRegistrationGroup: 'default',

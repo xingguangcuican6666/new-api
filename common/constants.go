@@ -62,6 +62,7 @@ var MaxRecentItems = 1000
 var PasswordLoginEnabled = true
 var PasswordLoginEncryptionEnabled = false
 var PasswordRegisterEnabled = true
+var InviteCodeRegisterEnabled = true // 密码注册是否强制要求有效邀请码
 var EmailVerificationEnabled = false
 var GitHubOAuthEnabled = false
 var LinuxDOOAuthEnabled = false

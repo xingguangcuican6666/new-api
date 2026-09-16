@@ -6617,6 +6617,10 @@
     "Success/failure requests within the statistics window": "統計區間內的成功/失敗請求數",
     "Time since the last successful request": "距上次成功請求的時間",
     "Last success": "最後成功",
-    "First-byte latency of the last streaming request": "最後一次串流請求的首字延遲"
+    "First-byte latency of the last streaming request": "最後一次串流請求的首字延遲",
+    "Invite Code Registration": "邀請碼註冊",
+    "Require a valid invitation code to register": "註冊時必須填寫有效的邀請碼",
+    "Invitation code": "邀請碼",
+    "Please enter an invitation code": "請輸入邀請碼"
   }
 }
