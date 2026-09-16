@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { PendingBanBanner } from './pending-ban-banner'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -40,6 +41,7 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
         <SidebarProvider defaultOpen={defaultOpen} className='flex-col'>
           <SkipToMain />
           <AppHeader />
+          <PendingBanBanner />
           <div className='flex min-h-0 w-full flex-1'>
             <AppSidebar />
             <SidebarInset
