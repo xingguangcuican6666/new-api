@@ -77,14 +77,79 @@ func performCreateUserRequest(t *testing.T, body string) *httptest.ResponseRecor
 func TestRegisterUsesConfiguredGroupAndIgnoresClientGroup(t *testing.T) {
 	setupRegistrationGroupControllerTest(t)
 	require.NoError(t, setting.ApplyRegistrationGroupConfiguration("free", ratio_setting.GetGroupRatioCopy()))
+	createRegistrationInviter(t, "group-inviter", "group-valid-invite")
 
-	recorder := performRegisterRequest(t, `{"username":"selfservice","password":"password-1234","group":"vip"}`)
+	recorder := performRegisterRequest(t, `{"username":"selfservice","password":"password-1234","aff_code":"group-valid-invite","group":"vip"}`)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), `"success":true`)
 
 	var created model.User
 	require.NoError(t, model.DB.First(&created, "username = ?", "selfservice").Error)
 	assert.Equal(t, "free", created.Group, "the server-configured group must win over the ignored client field")
+}
+
+func createRegistrationInviter(t *testing.T, username, affCode string) model.User {
+	t.Helper()
+	inviter := model.User{
+		Username: username, Password: "password-1234", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: affCode,
+	}
+	require.NoError(t, model.DB.Create(&inviter).Error)
+	return inviter
+}
+
+func TestRegisterRequiresInvitationCode(t *testing.T) {
+	setupRegistrationGroupControllerTest(t)
+
+	tests := []struct {
+		name    string
+		body    string
+		message string
+	}{
+		{
+			name:    "missing",
+			body:    `{"username":"missing-invite","password":"password-1234"}`,
+			message: i18n.T(nil, i18n.MsgUserAffCodeEmpty),
+		},
+		{
+			name:    "blank",
+			body:    `{"username":"blank-invite","password":"password-1234","aff_code":"   "}`,
+			message: i18n.T(nil, i18n.MsgUserAffCodeEmpty),
+		},
+		{
+			name:    "invalid",
+			body:    `{"username":"invalid-invite","password":"password-1234","aff_code":"not-found"}`,
+			message: i18n.T(nil, i18n.MsgUserAffCodeInvalid),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := performRegisterRequest(t, test.body)
+			require.Equal(t, http.StatusOK, recorder.Code)
+			assert.Contains(t, recorder.Body.String(), `"success":false`)
+			assert.Contains(t, recorder.Body.String(), test.message)
+		})
+	}
+
+	var count int64
+	require.NoError(t, model.DB.Model(&model.User{}).Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func TestRegisterAcceptsValidTrimmedInvitationCode(t *testing.T) {
+	setupRegistrationGroupControllerTest(t)
+	require.NoError(t, setting.ApplyRegistrationGroupConfiguration("free", ratio_setting.GetGroupRatioCopy()))
+	inviter := createRegistrationInviter(t, "inviter", "valid-invite")
+
+	recorder := performRegisterRequest(t, `{"username":"invited-user","password":"password-1234","aff_code":"  valid-invite  ","group":"vip"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+
+	var created model.User
+	require.NoError(t, model.DB.First(&created, "username = ?", "invited-user").Error)
+	assert.Equal(t, inviter.Id, created.InviterId)
+	assert.Equal(t, "free", created.Group)
 }
 
 func TestCreateUserKeepsDefaultGroup(t *testing.T) {
@@ -120,7 +185,8 @@ func TestRegisterFailsClosedWithoutLeakingGroupConfiguration(t *testing.T) {
 	require.NoError(t, model.DB.Create(&model.Option{Key: "GroupRatio", Value: `{"default":1}`}).Error)
 	setting.ApplyInvalidRegistrationGroupConfiguration("secret-group", map[string]float64{"default": 1}, nil)
 
-	recorder := performRegisterRequest(t, `{"username":"blocked","password":"password-1234"}`)
+	createRegistrationInviter(t, "blocked-inviter", "blocked-valid-invite")
+	recorder := performRegisterRequest(t, `{"username":"blocked","password":"password-1234","aff_code":"blocked-valid-invite"}`)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), `"success":false`)
 	message := i18n.T(nil, i18n.MsgUserRegisterFailed)

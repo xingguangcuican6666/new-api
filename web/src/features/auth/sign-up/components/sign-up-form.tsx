@@ -92,6 +92,7 @@ export function SignUpForm({
     resolver: zodResolver(registerFormSchema),
     defaultValues: {
       username: '',
+      aff_code: getAffiliateCode(),
       email: '',
       password: '',
       confirmPassword: '',
@@ -136,8 +137,9 @@ export function SignUpForm({
     const aff = new URLSearchParams(window.location.search).get('aff')?.trim()
     if (aff) {
       saveAffiliateCode(aff)
+      form.setValue('aff_code', aff, { shouldValidate: true })
     }
-  }, [])
+  }, [form])
 
   async function onSubmit(data: z.infer<typeof registerFormSchema>) {
     if (requiresLegalConsent && !agreedToLegal) {
@@ -166,7 +168,7 @@ export function SignUpForm({
         password: data.password,
         email: data.email || undefined,
         verification_code: verificationCode || undefined,
-        aff_code: getAffiliateCode(),
+        aff_code: data.aff_code.trim(),
         turnstile: turnstileToken,
       })
 
@@ -293,6 +295,27 @@ export function SignUpForm({
               <FormLabel>{t('Confirm password')}</FormLabel>
               <FormControl>
                 <PasswordInput placeholder={t('Confirm password')} {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name='aff_code'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Invitation code')}</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={t('Please enter an invitation code')}
+                  {...field}
+                  onChange={(event) => {
+                    field.onChange(event)
+                    saveAffiliateCode(event.target.value.trim())
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
