@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { useProfile } from '@/features/profile/hooks/use-profile'
@@ -40,17 +41,31 @@ afterEach(() => {
 })
 
 describe('PendingBanBanner', () => {
-  it('renders the pending-ban warning and deadline', () => {
+  it('renders a single-line summary with a fixed arrow and opens details', async () => {
     vi.mocked(useProfile).mockReturnValue({ profile } as ReturnType<
       typeof useProfile
     >)
+    const user = userEvent.setup()
 
     render(<PendingBanBanner />)
 
     const alert = screen.getByRole('alert')
-    expect(alert).toHaveTextContent('Your account is scheduled to be banned')
-    expect(alert).toHaveTextContent('Pending fix: Update the account email')
-    expect(alert).toHaveTextContent(
+    const trigger = within(alert).getByRole('button')
+    expect(trigger).toHaveTextContent(
+      'Your account is scheduled to be banned: Pending fix: Update the account email->'
+    )
+    expect(trigger.querySelector('.truncate')).not.toBeNull()
+    expect(trigger.lastElementChild).toHaveTextContent('->')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await user.click(trigger)
+
+    const dialog = screen.getByRole('dialog', {
+      name: 'Your account is scheduled to be banned',
+    })
+    expect(dialog).toHaveTextContent('Pending fix: Update the account email')
+    expect(dialog).toHaveTextContent('Deadline:')
+    expect(dialog).toHaveTextContent(
       new Date(profile.pending_ban_deadline * 1000).toLocaleString()
     )
   })

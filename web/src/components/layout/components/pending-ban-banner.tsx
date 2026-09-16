@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { Dialog } from '@/components/dialog'
 import { useProfile } from '@/features/profile/hooks/use-profile'
 
 export function PendingBanBanner() {
@@ -32,27 +33,47 @@ export function PendingBanBanner() {
   const deadline = new Date(
     profile.pending_ban_deadline * 1000
   ).toLocaleString()
+  const summary = `${t('Your account is scheduled to be banned')}: ${t(
+    'Pending fix:'
+  )} ${profile.pending_ban_reason}`
 
   return (
     <div
       role='alert'
-      className='flex w-full items-start gap-3 border-b border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100'
+      className='w-full border-b border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100'
     >
-      <AlertTriangle className='mt-0.5 size-5 shrink-0' aria-hidden='true' />
-      <div className='min-w-0 text-sm'>
-        <p className='font-semibold'>
-          {t('Your account is scheduled to be banned')}
-        </p>
-        <p>
-          {t('Pending fix:')} {profile.pending_ban_reason}
-        </p>
-        <p>
-          {t('If the issue is not fixed before')} {deadline}
-          {t(
-            ', the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.'
-          )}
-        </p>
-      </div>
+      <Dialog
+        title={t('Your account is scheduled to be banned')}
+        showCloseButton
+        trigger={
+          <button
+            type='button'
+            className='flex h-9 w-full items-center gap-2 px-4 text-left text-sm hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:outline-none focus-visible:ring-inset dark:hover:bg-amber-900/50'
+          >
+            <AlertTriangle className='size-4 shrink-0' aria-hidden='true' />
+            <span className='min-w-0 flex-1 truncate'>{summary}</span>
+            <span className='shrink-0 font-medium' aria-hidden='true'>
+              -&gt;
+            </span>
+          </button>
+        }
+      >
+        <div className='space-y-3 text-sm'>
+          <p>
+            <span className='font-medium'>{t('Pending fix:')}</span>{' '}
+            {profile.pending_ban_reason}
+          </p>
+          <p>
+            <span className='font-medium'>{t('Deadline:')}</span> {deadline}
+          </p>
+          <p>
+            {t('If the issue is not fixed before')} {deadline}
+            {t(
+              ', the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.'
+            )}
+          </p>
+        </div>
+      </Dialog>
     </div>
   )
 }
