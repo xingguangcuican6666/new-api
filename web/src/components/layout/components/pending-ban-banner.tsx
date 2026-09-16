@@ -23,7 +23,7 @@ import { Dialog } from '@/components/dialog'
 import { useProfile } from '@/features/profile/hooks/use-profile'
 
 export function PendingBanBanner() {
-  const { t } = useTranslation('users')
+  const { t } = useTranslation('translation')
   const { profile } = useProfile()
 
   if (!profile?.pending_ban_reason || !profile.pending_ban_deadline) {
@@ -40,7 +40,7 @@ export function PendingBanBanner() {
   return (
     <div
       role='alert'
-      className='w-full border-b border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100'
+      className='relative z-20 w-full border-b border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100'
     >
       <Dialog
         title={t('Your account is scheduled to be banned')}

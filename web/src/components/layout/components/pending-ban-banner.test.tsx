@@ -26,8 +26,12 @@ import { PendingBanBanner } from './pending-ban-banner'
 
 vi.mock('@/features/profile/hooks/use-profile')
 
+const useTranslation = vi.fn((_namespace: string) => ({
+  t: (key: string) => key,
+}))
+
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: (namespace: string) => useTranslation(namespace),
 }))
 
 const profile = {
@@ -50,6 +54,8 @@ describe('PendingBanBanner', () => {
     render(<PendingBanBanner />)
 
     const alert = screen.getByRole('alert')
+    expect(alert).toHaveClass('relative', 'z-20')
+    expect(useTranslation).toHaveBeenCalledWith('translation')
     const trigger = within(alert).getByRole('button')
     expect(trigger).toHaveTextContent(
       'Your account is scheduled to be banned: Pending fix: Update the account email->'
