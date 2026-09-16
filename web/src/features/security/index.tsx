@@ -75,6 +75,29 @@ export function Security() {
     content = (
       <div className='grid gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.46fr)] xl:items-start'>
         <div className='min-w-0 space-y-4 sm:space-y-6'>
+          {(profile.pending_ban_deadline ?? 0) > 0 && (
+            <div
+              role='alert'
+              className='border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-200 rounded-lg border p-4 text-sm'
+            >
+              <p className='font-medium'>
+                {t('Your account is scheduled to be banned')}
+              </p>
+              <p className='mt-1'>
+                {t('Pending fix:')}{' '}
+                {profile.pending_ban_reason || t('Unknown')}
+              </p>
+              <p className='mt-1'>
+                {t('If the issue is not fixed before')}{' '}
+                {new Date(
+                  (profile.pending_ban_deadline ?? 0) * 1000
+                ).toLocaleString()}
+                {t(
+                  ', the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.'
+                )}
+              </p>
+            </div>
+          )}
           <section
             aria-labelledby='security-authentication'
             className='space-y-3'

@@ -6621,6 +6621,27 @@
     "Invite Code Registration": "邀請碼註冊",
     "Require a valid invitation code to register": "註冊時必須填寫有效的邀請碼",
     "Invitation code": "邀請碼",
-    "Please enter an invitation code": "請輸入邀請碼"
+    "Please enter an invitation code": "請輸入邀請碼",
+    "Delayed Ban": "延遲封禁",
+    "Lift Delayed Ban": "解除延遲封禁",
+    "The account keeps working for the grace period. It is banned automatically when the deadline passes without a fix, and the pending ban is lifted automatically once the issue is fixed.": "整改期限內帳號可正常使用；到期未修復將自動封禁，修復後延遲封禁自動解除。",
+    "Invalid email (auto-lifted once the email is fixed)": "郵箱不合法（修復郵箱後自動解除）",
+    "Custom reason (manual lift only)": "自訂理由（僅可手動解除）",
+    "Custom reason": "自訂理由",
+    "Describe what the user must fix": "描述要求使用者整改的內容",
+    "Grace period (hours)": "整改期限（小時）",
+    "Between 1 and 720 hours. Default is 24 hours.": "範圍 1–720 小時，預設 24 小時。",
+    "Delayed ban scheduled for {{username}}": "已對 {{username}} 發起延遲封禁",
+    "Failed to schedule the delayed ban": "發起延遲封禁失敗",
+    "Delayed ban scheduled successfully": "延遲封禁設定成功",
+    "Delayed ban lifted successfully": "延遲封禁已解除",
+    "Pending fix:": "待整改：",
+    "Deadline:": "截止時間：",
+    "Your account is scheduled to be banned": "您的帳號即將被延遲封禁",
+    "If the issue is not fixed before": "若在",
+    ", the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.": "前未完成整改，帳號將被自動封禁；整改完成後延遲封禁會自動解除。",
+    "Email Format Regex": "郵箱格式正則",
+    "e.g. ^[^@]+@example[.]com$": "例如 ^[^@]+@example[.]com$",
+    "Optional custom regex (Go syntax) account emails must match. Leave empty for the built-in validation. Invalid emails can be given a delayed ban from the user page.": "可選的郵箱格式正則（Go 語法），使用者郵箱需匹配；留空使用內建校驗。可在使用者頁面對郵箱不合法的使用者發起延遲封禁。"
   }
 }

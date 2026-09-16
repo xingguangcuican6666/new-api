@@ -124,9 +124,10 @@ export async function deleteUser(id: number): Promise<ApiResponse> {
  */
 export async function manageUser(
   id: number,
-  action: ManageUserAction
+  action: ManageUserAction,
+  payload?: { reason?: string; hours?: number }
 ): Promise<ApiResponse<Partial<User>>> {
-  const res = await api.post('/api/user/manage', { id, action })
+  const res = await api.post('/api/user/manage', { id, action, ...payload })
   return res.data
 }
 

@@ -6621,6 +6621,27 @@
     "Invite Code Registration": "Đăng ký bằng mã mời",
     "Require a valid invitation code to register": "Yêu cầu mã mời hợp lệ khi đăng ký",
     "Invitation code": "Mã mời",
-    "Please enter an invitation code": "Vui lòng nhập mã mời"
+    "Please enter an invitation code": "Vui lòng nhập mã mời",
+    "Delayed Ban": "Cấm có hoãn",
+    "Lift Delayed Ban": "Bỏ cấm có hoãn",
+    "The account keeps working for the grace period. It is banned automatically when the deadline passes without a fix, and the pending ban is lifted automatically once the issue is fixed.": "Tài khoản vẫn hoạt động trong thời gian gia hạn. Tự động bị cấm khi hết hạn mà chưa sửa, và tự động bỏ cấm sau khi đã khắc phục.",
+    "Invalid email (auto-lifted once the email is fixed)": "Email không hợp lệ (tự bỏ khi email được sửa)",
+    "Custom reason (manual lift only)": "Lý do tùy chỉnh (chỉ bỏ thủ công)",
+    "Custom reason": "Lý do tùy chỉnh",
+    "Describe what the user must fix": "Mô tả điều người dùng cần khắc phục",
+    "Grace period (hours)": "Thời gian gia hạn (giờ)",
+    "Between 1 and 720 hours. Default is 24 hours.": "Từ 1 đến 720 giờ. Mặc định là 24 giờ.",
+    "Delayed ban scheduled for {{username}}": "Đã đặt cấm có hoãn cho {{username}}",
+    "Failed to schedule the delayed ban": "Đặt cấm có hoãn thất bại",
+    "Delayed ban scheduled successfully": "Đã đặt cấm có hoãn thành công",
+    "Delayed ban lifted successfully": "Đã bỏ cấm có hoãn thành công",
+    "Pending fix:": "Cần khắc phục:",
+    "Deadline:": "Hạn:",
+    "Your account is scheduled to be banned": "Tài khoản của bạn sắp bị cấm",
+    "If the issue is not fixed before": "Nếu chưa khắc phục trước",
+    ", the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.": " tài khoản sẽ tự động bị cấm. Khi đã khắc phục, lệnh cấm có hoãn sẽ tự động được bỏ.",
+    "Email Format Regex": "Regex định dạng email",
+    "e.g. ^[^@]+@example[.]com$": "vd. ^[^@]+@example[.]com$",
+    "Optional custom regex (Go syntax) account emails must match. Leave empty for the built-in validation. Invalid emails can be given a delayed ban from the user page.": "Regex tùy chọn (cú pháp Go) mà email người dùng phải khớp. Để trống dùng xác thực sẵn có. Có thể đặt cấm có hoãn từ trang người dùng."
   }
 }

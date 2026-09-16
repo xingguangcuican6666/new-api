@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -511,32 +512,34 @@ func buildSelfUserData(user *model.User) map[string]any {
 	permissions := calculateUserPermissions(user.Role)
 	permissions["admin_permissions"] = authz.Capabilities(user.Id, user.Role)
 	return map[string]any{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"has_password":      user.HasPassword,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,
+		"id":                   user.Id,
+		"username":             user.Username,
+		"display_name":         user.DisplayName,
+		"has_password":         user.HasPassword,
+		"role":                 user.Role,
+		"status":               user.Status,
+		"email":                user.Email,
+		"github_id":            user.GitHubId,
+		"discord_id":           user.DiscordId,
+		"oidc_id":              user.OidcId,
+		"wechat_id":            user.WeChatId,
+		"telegram_id":          user.TelegramId,
+		"group":                user.Group,
+		"quota":                user.Quota,
+		"used_quota":           user.UsedQuota,
+		"request_count":        user.RequestCount,
+		"aff_code":             user.AffCode,
+		"aff_count":            user.AffCount,
+		"aff_quota":            user.AffQuota,
+		"aff_history_quota":    user.AffHistoryQuota,
+		"inviter_id":           user.InviterId,
+		"linux_do_id":          user.LinuxDOId,
+		"setting":              user.Setting,
+		"stripe_customer":      user.StripeCustomer,
+		"pending_ban_reason":   user.PendingBanReason,
+		"pending_ban_deadline": user.PendingBanDeadline,
+		"sidebar_modules":      userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":          permissions,
 	}
 }
 
@@ -1071,6 +1074,8 @@ type ManageRequest struct {
 	Action string `json:"action"`
 	Value  int    `json:"value"`
 	Mode   string `json:"mode"`
+	Reason string `json:"reason"` // pending_ban: what the user must fix
+	Hours  int    `json:"hours"`  // pending_ban: grace period in hours
 }
 
 // ManageUser Only admin user can do this
@@ -1107,6 +1112,60 @@ func ManageUser(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDisableRootUser)
 			return
 		}
+	case "pending_ban":
+		if user.Role == common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserCannotDisableRootUser)
+			return
+		}
+		if user.Status != common.UserStatusEnabled {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅启用状态的用户可以发起延迟封禁"})
+			return
+		}
+		reason := strings.TrimSpace(req.Reason)
+		if reason == "" {
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+			return
+		}
+		if reason == model.PendingBanReasonEmailInvalid {
+			if _, err := service.ValidateAccountEmail(user.Email); err == nil {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": "该用户邮箱当前校验通过，无需发起邮箱整改"})
+				return
+			}
+		}
+		hours := req.Hours
+		if hours <= 0 {
+			hours = 24
+		}
+		if hours > 24*30 {
+			hours = 24 * 30
+		}
+		deadline := time.Now().Unix() + int64(hours)*3600
+		if err := model.SetUserPendingBan(user.Id, reason, deadline); err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		recordManageAuditFor(c, user.Id, "user.pending_ban", map[string]any{
+			"action":   "pending_ban",
+			"username": user.Username,
+			"id":       user.Id,
+			"reason":   reason,
+			"hours":    hours,
+			"deadline": deadline,
+		})
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+		return
+	case "clear_pending_ban":
+		if err := model.ClearUserPendingBan(user.Id); err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		recordManageAuditFor(c, user.Id, "user.pending_ban", map[string]any{
+			"action":   "clear_pending_ban",
+			"username": user.Username,
+			"id":       user.Id,
+		})
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+		return
 	case "enable":
 		user.Status = common.UserStatusEnabled
 	case "delete":

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -226,6 +227,17 @@ func UpdateOption(c *gin.Context) {
 				"message": "无法启用 GitHub OAuth，请先填入 GitHub Client Id 以及 GitHub Client Secret！",
 			})
 			return
+		}
+	case "EmailFormatRegex":
+		pattern := strings.TrimSpace(option.Value.(string))
+		if pattern != "" {
+			if _, err := regexp.Compile(pattern); err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "无效的邮箱格式正则表达式：" + err.Error(),
+				})
+				return
+			}
 		}
 	case "discord.enabled":
 		if option.Value == "true" && system_setting.GetDiscordSettings().ClientId == "" {

@@ -151,22 +151,57 @@ export function useUsersColumns(): ColumnDef<User>[] {
           return null
         }
 
+        const hasPendingBan =
+          !isUserDeleted(user) &&
+          (user.pending_ban_deadline ?? 0) > 0 &&
+          user.status === USER_STATUS.ENABLED
+
         return (
-          <Tooltip>
-            <TooltipTrigger render={<div className='-ml-1.5 cursor-help' />}>
-              <StatusBadge
-                label={t(statusConfig.labelKey)}
-                variant={isUserDeleted(user) ? 'neutral' : statusConfig.variant}
-                copyable={false}
-                className='font-normal'
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className='text-xs'>
-                {t('Requests:')} {requestCount.toLocaleString()}
-              </p>
-            </TooltipContent>
-          </Tooltip>
+          <div className='flex flex-col items-start gap-1'>
+            <Tooltip>
+              <TooltipTrigger render={<div className='-ml-1.5 cursor-help' />}>
+                <StatusBadge
+                  label={t(statusConfig.labelKey)}
+                  variant={
+                    isUserDeleted(user) ? 'neutral' : statusConfig.variant
+                  }
+                  copyable={false}
+                  className='font-normal'
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className='text-xs'>
+                  {t('Requests:')} {requestCount.toLocaleString()}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+            {hasPendingBan && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={<div className='-ml-1.5 cursor-help' />}
+                >
+                  <StatusBadge
+                    label={t('Delayed Ban')}
+                    variant='warning'
+                    copyable={false}
+                    className='font-normal'
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className='text-xs'>
+                    {t('Pending fix:')}{' '}
+                    {user.pending_ban_reason || t('Unknown')}
+                  </p>
+                  <p className='text-xs'>
+                    {t('Deadline:')}{' '}
+                    {new Date(
+                      (user.pending_ban_deadline ?? 0) * 1000
+                    ).toLocaleString()}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         )
       },
       filterFn: (row, id, value) => {

@@ -44,6 +44,7 @@ func InitOptionMap() {
 	common.OptionMap["PasswordRegisterEnabled"] = strconv.FormatBool(common.PasswordRegisterEnabled)
 	common.OptionMap["InviteCodeRegisterEnabled"] = strconv.FormatBool(common.InviteCodeRegisterEnabled)
 	common.OptionMap["EmailVerificationEnabled"] = strconv.FormatBool(common.EmailVerificationEnabled)
+	common.OptionMap["EmailFormatRegex"] = common.EmailFormatRegex
 	common.OptionMap["GitHubOAuthEnabled"] = strconv.FormatBool(common.GitHubOAuthEnabled)
 	common.OptionMap["LinuxDOOAuthEnabled"] = strconv.FormatBool(common.LinuxDOOAuthEnabled)
 	common.OptionMap["TelegramOAuthEnabled"] = strconv.FormatBool(common.TelegramOAuthEnabled)
@@ -486,6 +487,8 @@ func updateOptionMap(key string, value string) (err error) {
 	switch key {
 	case "EmailDomainWhitelist":
 		common.EmailDomainWhitelist = strings.Split(value, ",")
+	case "EmailFormatRegex":
+		common.EmailFormatRegex = value
 	case "SMTPServer":
 		common.SMTPServer = value
 	case "SMTPPort":

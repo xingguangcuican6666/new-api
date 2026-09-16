@@ -37,6 +37,9 @@ func ValidateAccountEmail(email string) (string, error) {
 	if common.Validate.Var(email, "required,email,max=50") != nil {
 		return "", ErrAccountEmailInvalid
 	}
+	if !EmailFormatMatches(email) {
+		return "", ErrAccountEmailInvalid
+	}
 	parts := strings.Split(email, "@")
 	if len(parts) != 2 {
 		return "", ErrAccountEmailInvalid

@@ -60,6 +60,8 @@ export const userSchema = z.object({
   last_login_at: z.number().optional(),
   DeletedAt: z.any().nullable().optional(),
   remark: z.string().optional(),
+  pending_ban_reason: z.string().optional(),
+  pending_ban_deadline: z.number().optional(),
   admin_permissions: z
     .record(z.string(), z.record(z.string(), z.boolean()))
     .optional(),
@@ -137,6 +139,8 @@ export type ManageUserAction =
   | 'disable'
   | 'delete'
   | 'add_quota'
+  | 'pending_ban'
+  | 'clear_pending_ban'
 
 export type QuotaAdjustMode = 'add' | 'subtract' | 'override'
 

@@ -133,6 +133,10 @@ func main() {
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()
 
+	// Delayed-ban enforcement: lift pending bans whose fix condition holds,
+	// ban the accounts whose grace period passed.
+	service.StartPendingBanEnforcement()
+
 	// Report this process as a system instance so the System Info page can show
 	// all currently alive nodes in multi-instance deployments.
 	service.StartSystemInstanceReporter()

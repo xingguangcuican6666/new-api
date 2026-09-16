@@ -37,6 +37,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { getGroups } from '@/features/users/api'
@@ -62,6 +63,7 @@ const basicAuthSchema = z.object({
   EmailDomainRestrictionEnabled: z.boolean(),
   EmailAliasRestrictionEnabled: z.boolean(),
   EmailDomainWhitelist: z.string(),
+  EmailFormatRegex: z.string(),
 })
 
 type BasicAuthFormValues = z.infer<typeof basicAuthSchema>
@@ -385,6 +387,28 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                 <FormDescription>
                   {t(
                     'One domain per line (only used when domain restriction is enabled)'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='EmailFormatRegex'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Email Format Regex')}</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder={t('e.g. ^[^@]+@example[.]com$')}
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'Optional custom regex (Go syntax) account emails must match. Leave empty for the built-in validation. Invalid emails can be given a delayed ban from the user page.'
                   )}
                 </FormDescription>
                 <FormMessage />

@@ -6621,6 +6621,27 @@
     "Invite Code Registration": "Inscription par code d’invitation",
     "Require a valid invitation code to register": "Exiger un code d’invitation valide pour s’inscrire",
     "Invitation code": "Code d’invitation",
-    "Please enter an invitation code": "Veuillez saisir un code d’invitation"
+    "Please enter an invitation code": "Veuillez saisir un code d’invitation",
+    "Delayed Ban": "Bannissement différé",
+    "Lift Delayed Ban": "Lever le bannissement différé",
+    "The account keeps working for the grace period. It is banned automatically when the deadline passes without a fix, and the pending ban is lifted automatically once the issue is fixed.": "Le compte reste utilisable pendant le délai. Il est banni automatiquement à l’échéance sans correction, et le bannissement différé est levé automatiquement dès que le problème est corrigé.",
+    "Invalid email (auto-lifted once the email is fixed)": "E-mail invalide (levé automatiquement une fois l’e-mail corrigé)",
+    "Custom reason (manual lift only)": "Motif personnalisé (levée manuelle uniquement)",
+    "Custom reason": "Motif personnalisé",
+    "Describe what the user must fix": "Décrivez ce que l’utilisateur doit corriger",
+    "Grace period (hours)": "Délai de grâce (heures)",
+    "Between 1 and 720 hours. Default is 24 hours.": "Entre 1 et 720 heures. Par défaut : 24 heures.",
+    "Delayed ban scheduled for {{username}}": "Bannissement différé programmé pour {{username}}",
+    "Failed to schedule the delayed ban": "Échec de la programmation du bannissement différé",
+    "Delayed ban scheduled successfully": "Bannissement différé programmé avec succès",
+    "Delayed ban lifted successfully": "Bannissement différé levé avec succès",
+    "Pending fix:": "À corriger :",
+    "Deadline:": "Échéance :",
+    "Your account is scheduled to be banned": "Votre compte est sur le point d’être banni",
+    "If the issue is not fixed before": "Si le problème n’est pas corrigé avant",
+    ", the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.": ", le compte sera banni automatiquement. Le bannissement différé est levé automatiquement une fois le problème corrigé.",
+    "Email Format Regex": "Regex de format d’e-mail",
+    "e.g. ^[^@]+@example[.]com$": "ex. ^[^@]+@example[.]com$",
+    "Optional custom regex (Go syntax) account emails must match. Leave empty for the built-in validation. Invalid emails can be given a delayed ban from the user page.": "Regex personnalisé facultatif (syntaxe Go) que les e-mails doivent respecter. Laissez vide pour la validation intégrée. Un bannissement différé peut être appliqué depuis la page des utilisateurs."
   }
 }

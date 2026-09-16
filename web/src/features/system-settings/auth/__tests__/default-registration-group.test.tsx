@@ -39,6 +39,7 @@ const defaultValues = {
   EmailDomainRestrictionEnabled: false,
   EmailAliasRestrictionEnabled: false,
   EmailDomainWhitelist: '',
+  EmailFormatRegex: '',
 }
 
 afterEach(() => {

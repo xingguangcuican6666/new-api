@@ -28,6 +28,8 @@ import {
   ShieldAlert,
   Link2,
   CreditCard,
+  Hourglass,
+  TimerOff,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -59,6 +61,7 @@ import {
 import { getUserActionMessage } from '../lib'
 import type { User, ManageUserAction } from '../types'
 import { UserBindingDialog } from './dialogs/user-binding-dialog'
+import { UsersPendingBanDialog } from './dialogs/users-pending-ban-dialog'
 import { useUsers } from './users-provider'
 
 interface DataTableRowActionsProps {
@@ -73,6 +76,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [resetTwoFAOpen, setResetTwoFAOpen] = useState(false)
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [subscriptionsDialogOpen, setSubscriptionsDialogOpen] = useState(false)
+  const [pendingBanOpen, setPendingBanOpen] = useState(false)
 
   const handleEdit = () => {
     setCurrentRow(user)
@@ -133,6 +137,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const isDisabled = user.status === USER_STATUS.DISABLED
   const isAdmin = user.role >= USER_ROLE.ADMIN
   const isRoot = user.role === USER_ROLE.ROOT
+  const hasPendingBan = (user.pending_ban_deadline ?? 0) > 0
 
   if (isUserDeleted(user)) {
     return null
@@ -175,6 +180,29 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             {t('Disable')}
             <DropdownMenuShortcut>
               <PowerOff size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+
+        {!isDisabled && !isRoot && (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              setPendingBanOpen(true)
+            }}
+          >
+            {t('Delayed Ban')}
+            <DropdownMenuShortcut>
+              <Hourglass size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+
+        {hasPendingBan && (
+          <DropdownMenuItem onClick={() => handleManage('clear_pending_ban')}>
+            {t('Lift Delayed Ban')}
+            <DropdownMenuShortcut>
+              <TimerOff size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
@@ -285,6 +313,14 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         )}
         confirmText={t('Reset 2FA')}
         handleConfirm={handleResetTwoFA}
+      />
+
+      <UsersPendingBanDialog
+        open={pendingBanOpen}
+        onOpenChange={setPendingBanOpen}
+        userId={user.id}
+        username={user.username}
+        onSuccess={triggerRefresh}
       />
 
       <UserBindingDialog

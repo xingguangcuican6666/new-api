@@ -57,6 +57,10 @@ export interface UserProfile {
   request_count: number
   /** Account status (1=启用, 2=禁用, 3=待审核, 4=已删除) */
   status: number
+  /** Delayed ban: what the user must fix, empty when none */
+  pending_ban_reason?: string
+  /** Delayed ban deadline (unix seconds, 0 = none) */
+  pending_ban_deadline?: number
   /** Access token (system token) */
   access_token?: string
   /** Affiliate code */

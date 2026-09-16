@@ -6621,6 +6621,27 @@
     "Invite Code Registration": "Регистрация по коду приглашения",
     "Require a valid invitation code to register": "Требовать действительный код приглашения для регистрации",
     "Invitation code": "Код приглашения",
-    "Please enter an invitation code": "Введите код приглашения"
+    "Please enter an invitation code": "Введите код приглашения",
+    "Delayed Ban": "Отложенная блокировка",
+    "Lift Delayed Ban": "Отменить отложенную блокировку",
+    "The account keeps working for the grace period. It is banned automatically when the deadline passes without a fix, and the pending ban is lifted automatically once the issue is fixed.": "В течение отсрочки аккаунт продолжает работать. По истечении срока без исправления аккаунт блокируется автоматически, а отложенная блокировка снимается сразу после исправления.",
+    "Invalid email (auto-lifted once the email is fixed)": "Недействительный e-mail (снимается автоматически после исправления)",
+    "Custom reason (manual lift only)": "Своя причина (только ручная отмена)",
+    "Custom reason": "Своя причина",
+    "Describe what the user must fix": "Опишите, что должен исправить пользователь",
+    "Grace period (hours)": "Отсрочка (часов)",
+    "Between 1 and 720 hours. Default is 24 hours.": "От 1 до 720 часов. По умолчанию 24 часа.",
+    "Delayed ban scheduled for {{username}}": "Отложенная блокировка запланирована для {{username}}",
+    "Failed to schedule the delayed ban": "Не удалось запланировать отложенную блокировку",
+    "Delayed ban scheduled successfully": "Отложенная блокировка успешно запланирована",
+    "Delayed ban lifted successfully": "Отложенная блокировка успешно снята",
+    "Pending fix:": "Требуется исправить:",
+    "Deadline:": "Срок:",
+    "Your account is scheduled to be banned": "Ваш аккаунт будет заблокирован",
+    "If the issue is not fixed before": "Если проблема не будет исправлена до",
+    ", the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.": " аккаунт будет заблокирован автоматически. После исправления отложенная блокировка снимается автоматически.",
+    "Email Format Regex": "Регулярное выражение формата e-mail",
+    "e.g. ^[^@]+@example[.]com$": "напр. ^[^@]+@example[.]com$",
+    "Optional custom regex (Go syntax) account emails must match. Leave empty for the built-in validation. Invalid emails can be given a delayed ban from the user page.": "Необязательное регулярное выражение (синтаксис Go) для e-mail пользователей. Оставьте пустым для встроенной проверки. Отложенную блокировку можно запустить со страницы пользователей."
   }
 }

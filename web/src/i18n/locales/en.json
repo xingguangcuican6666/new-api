@@ -6621,6 +6621,27 @@
     "Invite Code Registration": "Invite Code Registration",
     "Require a valid invitation code to register": "Require a valid invitation code to register",
     "Invitation code": "Invitation code",
-    "Please enter an invitation code": "Please enter an invitation code"
+    "Please enter an invitation code": "Please enter an invitation code",
+    "Delayed Ban": "Delayed Ban",
+    "Lift Delayed Ban": "Lift Delayed Ban",
+    "The account keeps working for the grace period. It is banned automatically when the deadline passes without a fix, and the pending ban is lifted automatically once the issue is fixed.": "The account keeps working for the grace period. It is banned automatically when the deadline passes without a fix, and the pending ban is lifted automatically once the issue is fixed.",
+    "Invalid email (auto-lifted once the email is fixed)": "Invalid email (auto-lifted once the email is fixed)",
+    "Custom reason (manual lift only)": "Custom reason (manual lift only)",
+    "Custom reason": "Custom reason",
+    "Describe what the user must fix": "Describe what the user must fix",
+    "Grace period (hours)": "Grace period (hours)",
+    "Between 1 and 720 hours. Default is 24 hours.": "Between 1 and 720 hours. Default is 24 hours.",
+    "Delayed ban scheduled for {{username}}": "Delayed ban scheduled for {{username}}",
+    "Failed to schedule the delayed ban": "Failed to schedule the delayed ban",
+    "Delayed ban scheduled successfully": "Delayed ban scheduled successfully",
+    "Delayed ban lifted successfully": "Delayed ban lifted successfully",
+    "Pending fix:": "Pending fix:",
+    "Deadline:": "Deadline:",
+    "Your account is scheduled to be banned": "Your account is scheduled to be banned",
+    "If the issue is not fixed before": "If the issue is not fixed before",
+    ", the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.": ", the account will be banned automatically. The pending ban is lifted automatically once the issue is fixed.",
+    "Email Format Regex": "Email Format Regex",
+    "e.g. ^[^@]+@example[.]com$": "e.g. ^[^@]+@example[.]com$",
+    "Optional custom regex (Go syntax) account emails must match. Leave empty for the built-in validation. Invalid emails can be given a delayed ban from the user page.": "Optional custom regex (Go syntax) account emails must match. Leave empty for the built-in validation. Invalid emails can be given a delayed ban from the user page."
   }
 }

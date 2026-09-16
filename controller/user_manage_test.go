@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-redis/redis/v8"
@@ -605,4 +606,82 @@ func TestManageUserQuotaCacheUsesCommittedIntegerDifference(t *testing.T) {
 			}
 		})
 	}
+}
+
+func createPendingBanTarget(t *testing.T, username, email string, role int) model.User {
+	t.Helper()
+	user := model.User{
+		Username: username, Password: "password-1234", Role: role,
+		Status: common.UserStatusEnabled, Email: email, AuthVersion: 1,
+		AffCode: "pb-" + common.GetRandomString(8),
+	}
+	require.NoError(t, model.DB.Create(&user).Error)
+	return user
+}
+
+func TestManageUserPendingBanLifecycle(t *testing.T) {
+	setupManageUserTestDB(t)
+	target := createPendingBanTarget(t, "pending-ban-user", "not-an-email", common.RoleCommonUser)
+
+	// A user whose email already passes validation is refused for the email
+	// fix reason: the admin probably picked the wrong target.
+	target.Email = "valid@example.com"
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", target.Id).Update("email", target.Email).Error)
+	recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"pending_ban","reason":"email_invalid"}`, target.Id))
+	assert.Contains(t, recorder.Body.String(), `"success":false`)
+	assert.Contains(t, recorder.Body.String(), "校验通过")
+
+	// Arming with an invalid email sets the reason and a future deadline.
+	target.Email = "not-an-email"
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", target.Id).Update("email", target.Email).Error)
+	recorder = performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"pending_ban","reason":"email_invalid"}`, target.Id))
+	require.Contains(t, recorder.Body.String(), `"success":true`)
+	var armed model.User
+	require.NoError(t, model.DB.First(&armed, target.Id).Error)
+	assert.Equal(t, model.PendingBanReasonEmailInvalid, armed.PendingBanReason)
+	assert.Greater(t, armed.PendingBanDeadline, time.Now().Unix())
+	assert.Equal(t, common.UserStatusEnabled, armed.Status, "the account stays usable during the grace period")
+
+	// The admin clear action lifts the pending ban.
+	recorder = performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"clear_pending_ban"}`, target.Id))
+	require.Contains(t, recorder.Body.String(), `"success":true`)
+	var cleared model.User
+	require.NoError(t, model.DB.First(&cleared, target.Id).Error)
+	assert.Empty(t, cleared.PendingBanReason)
+	assert.Zero(t, cleared.PendingBanDeadline)
+
+	// Root users must never be armed.
+	createPendingBanTarget(t, "pending-ban-root", "not-an-email", common.RoleRootUser)
+	var root model.User
+	require.NoError(t, model.DB.Where("username = ?", "pending-ban-root").First(&root).Error)
+	recorder = performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"pending_ban","reason":"email_invalid"}`, root.Id))
+	assert.Contains(t, recorder.Body.String(), `"success":false`)
+}
+
+func TestEnforcePendingBansLiftsFixedAndBansOverdue(t *testing.T) {
+	setupManageUserTestDB(t)
+	fixed := createPendingBanTarget(t, "pending-fixed-user", "valid@example.com", common.RoleCommonUser)
+	overdue := createPendingBanTarget(t, "pending-overdue-user", "still-bad", common.RoleCommonUser)
+	pending := createPendingBanTarget(t, "pending-waiting-user", "still-bad", common.RoleCommonUser)
+	now := time.Now().Unix()
+	require.NoError(t, model.SetUserPendingBan(fixed.Id, model.PendingBanReasonEmailInvalid, now+3600))
+	require.NoError(t, model.SetUserPendingBan(overdue.Id, model.PendingBanReasonEmailInvalid, now-10))
+	require.NoError(t, model.SetUserPendingBan(pending.Id, model.PendingBanReasonEmailInvalid, now+3600))
+
+	service.EnforcePendingBans()
+
+	var reloadedFixed model.User
+	require.NoError(t, model.DB.First(&reloadedFixed, fixed.Id).Error)
+	assert.Equal(t, common.UserStatusEnabled, reloadedFixed.Status)
+	assert.Zero(t, reloadedFixed.PendingBanDeadline, "a fixed email lifts the pending ban")
+
+	var reloadedOverdue model.User
+	require.NoError(t, model.DB.First(&reloadedOverdue, overdue.Id).Error)
+	assert.Equal(t, common.UserStatusDisabled, reloadedOverdue.Status, "an overdue pending ban turns into a full ban")
+	assert.Zero(t, reloadedOverdue.PendingBanDeadline)
+
+	var reloadedPending model.User
+	require.NoError(t, model.DB.First(&reloadedPending, pending.Id).Error)
+	assert.Equal(t, common.UserStatusEnabled, reloadedPending.Status)
+	assert.Greater(t, reloadedPending.PendingBanDeadline, now, "an unfinished fix inside the grace period changes nothing")
 }
