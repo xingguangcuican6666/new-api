@@ -156,7 +156,20 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		}
 	}
 
+	// The upscale hook buffers the upstream response so it can replace it with
+	// the processed payload; it is installed only around DoResponse, which is
+	// the only step that writes to the client, and is always uninstalled right
+	// after so a retry attempt never nests capture writers.
+	upscaleHook := armImageUpscaleHook(c, info)
+	originalWriter := c.Writer
+	if upscaleHook != nil {
+		c.Writer = upscaleHook.writer(originalWriter)
+	}
+
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	if upscaleHook != nil {
+		c.Writer = originalWriter
+	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
@@ -193,5 +206,9 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), logContent)
+
+	if upscaleHook != nil {
+		return upscaleHook.process(c, info, request)
+	}
 	return nil
 }

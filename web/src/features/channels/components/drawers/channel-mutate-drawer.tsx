@@ -172,6 +172,10 @@ import {
   channelsQueryKeys,
   getAdvancedCustomStats,
   transformChannelToFormDefaults,
+  IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS,
+  IMAGE_UPSCALE_MAX_TIMEOUT_SECONDS,
+  IMAGE_UPSCALE_ON_ERROR_FAIL,
+  IMAGE_UPSCALE_ON_ERROR_FALLBACK,
   type ChannelFormValues,
   deduplicateKeys,
   getKeyPromptForType,
@@ -2558,6 +2562,180 @@ export function ChannelMutateDrawer({
             )}
           </div>
         )}
+      </fieldset>
+    </div>
+  )
+
+  const imageUpscaleEnabled = form.watch('image_upscale')?.enabled === true
+
+  const imageUpscaleFields = (
+    <div
+      className={channelConfigurationBlockClassName(
+        configuration.blocks.imageUpscale,
+        'space-y-4 scroll-mt-4'
+      )}
+    >
+      <CardHeading
+        status={configuration.blocks.imageUpscale}
+        title={t('Image Upscale Post-processing')}
+        icon={<Wand2 className='size-4' />}
+      />
+      <fieldset
+        disabled={sensitiveLocked}
+        className='space-y-4 disabled:opacity-60'
+      >
+        <div className='divide-border space-y-0 divide-y border-y'>
+          <FormField
+            control={form.control}
+            name='image_upscale.enabled'
+            render={({ field }) => (
+              <FormItem className='flex items-center justify-between px-4 py-3'>
+                <div className='space-y-0.5'>
+                  <FormLabel>{t('Enable image upscale')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'After each successful non-streaming image generation on this channel, submit every generated image to the target channel and model as an image edit and return the processed images to the client.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value === true}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+        <FormField
+          control={form.control}
+          name='image_upscale.target_channel_id'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Upscale target channel ID')}</FormLabel>
+              <FormControl>
+                <Input
+                  type='number'
+                  min={1}
+                  placeholder='166'
+                  disabled={!imageUpscaleEnabled}
+                  {...field}
+                  onChange={(e) =>
+                    field.onChange(
+                      e.target.value === '' ? 0 : Number(e.target.value)
+                    )
+                  }
+                />
+              </FormControl>
+              <FormDescription>
+                {t(
+                  'Channel that receives the generated images, typically a local upscaler exposed through an OpenAI Image Edits route.'
+                )}
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='image_upscale.target_model'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Upscale target model')}</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder='upscale-nomos-2x'
+                  disabled={!imageUpscaleEnabled}
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                {t(
+                  'Model billed for each upscale call. Set its price under model pricing, for example 0 to keep upscaling free.'
+                )}
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='image_upscale.on_error'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Behavior when upscale fails')}</FormLabel>
+              <Select
+                items={[
+                  {
+                    value: IMAGE_UPSCALE_ON_ERROR_FALLBACK,
+                    label: t('Return the original images'),
+                  },
+                  {
+                    value: IMAGE_UPSCALE_ON_ERROR_FAIL,
+                    label: t('Fail the whole request'),
+                  },
+                ]}
+                onValueChange={field.onChange}
+                value={field.value || IMAGE_UPSCALE_ON_ERROR_FALLBACK}
+                disabled={!imageUpscaleEnabled}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    <SelectItem value={IMAGE_UPSCALE_ON_ERROR_FALLBACK}>
+                      {t('Return the original images')}
+                    </SelectItem>
+                    <SelectItem value={IMAGE_UPSCALE_ON_ERROR_FAIL}>
+                      {t('Fail the whole request')}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                {t(
+                  'Fallback keeps the original generation and logs a warning; fail rejects the request even though the generation succeeded.'
+                )}
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='image_upscale.timeout_seconds'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Upscale timeout (seconds)')}</FormLabel>
+              <FormControl>
+                <Input
+                  type='number'
+                  min={1}
+                  max={IMAGE_UPSCALE_MAX_TIMEOUT_SECONDS}
+                  placeholder={String(IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS)}
+                  disabled={!imageUpscaleEnabled}
+                  {...field}
+                  onChange={(e) =>
+                    field.onChange(
+                      e.target.value === '' ? 0 : Number(e.target.value)
+                    )
+                  }
+                />
+              </FormControl>
+              <FormDescription>
+                {t(
+                  'Per-image upscale time limit, between 1 and 3600 seconds. Defaults to 300 seconds.'
+                )}
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
       </fieldset>
     </div>
   )
@@ -4996,6 +5174,7 @@ export function ChannelMutateDrawer({
               </fieldset>
             </div>
             {ratioProbeFields}
+            {imageUpscaleFields}
             {upstreamModelDetectionFields}
             {notesFields}
           </>

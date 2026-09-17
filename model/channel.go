@@ -1042,6 +1042,9 @@ func (channel *Channel) ValidateSettings() error {
 	if err := channelOtherSettings.RatioProbe.Validate(); err != nil {
 		return err
 	}
+	if err := channelOtherSettings.ImageUpscale.Validate(); err != nil {
+		return err
+	}
 	if constant.IsAdvancedCustomChannel(channel.Type) && channelOtherSettings.UpstreamModelUpdateCheckEnabled {
 		if _, ok := channelOtherSettings.AdvancedCustom.ModelListRoute(); !ok {
 			return fmt.Errorf("advanced custom channels require a %s route when upstream model update checks are enabled", dto.AdvancedCustomModelListPath)

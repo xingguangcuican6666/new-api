@@ -109,6 +109,7 @@ const CONFIGURATION_BLOCKS = {
   },
   billingQuery: { section: 'connection', fields: ['billing_query'] },
   ratioProbe: { section: 'other', fields: ['ratio_probe'] },
+  imageUpscale: { section: 'other', fields: ['image_upscale'] },
 } as const satisfies Record<
   string,
   {
@@ -212,6 +213,7 @@ export function getChannelConfigurationState(
       String(values.billing_query.type) !== '__channel_default__'
     ),
     ratioProbe: Boolean(values.ratio_probe?.enabled),
+    imageUpscale: Boolean(values.image_upscale?.enabled),
   }
   const blocks = {} as Record<
     ChannelConfigurationBlock,

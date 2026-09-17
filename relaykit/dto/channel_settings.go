@@ -346,6 +346,80 @@ func validateRatioProbeBound(name string, bound *float64) error {
 	return nil
 }
 
+const (
+	// ImageUpscaleOnErrorFallback returns the original generated images when the
+	// upscale call fails. It is the default policy.
+	ImageUpscaleOnErrorFallback = "fallback"
+	// ImageUpscaleOnErrorFail fails the whole image request when the upscale
+	// call fails, even though the generation itself succeeded.
+	ImageUpscaleOnErrorFail = "fail"
+
+	defaultImageUpscaleTimeoutSeconds = 300
+	maxImageUpscaleTimeoutSeconds     = 3600
+	maxImageUpscaleModelLength        = 255
+)
+
+// ImageUpscaleConfig chains a second relay call after every successful
+// non-streaming image relay on this channel: the generated images are submitted
+// to the target channel and model (typically a local upscaler exposed through an
+// OpenAI Image Edits route) and the processed images replace the response body.
+// The upscale call is billed separately under the target model's pricing.
+type ImageUpscaleConfig struct {
+	Enabled         bool   `json:"enabled"`
+	TargetChannelID int    `json:"target_channel_id"`
+	TargetModel     string `json:"target_model"`
+	// OnError controls the failure policy. Empty means ImageUpscaleOnErrorFallback.
+	OnError string `json:"on_error,omitempty"`
+	// TimeoutSeconds bounds the per-image upscale relay. Zero uses the default.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+}
+
+func (c *ImageUpscaleConfig) NormalizedOnError() string {
+	switch strings.ToLower(strings.TrimSpace(c.OnError)) {
+	case ImageUpscaleOnErrorFail:
+		return ImageUpscaleOnErrorFail
+	default:
+		return ImageUpscaleOnErrorFallback
+	}
+}
+
+func (c *ImageUpscaleConfig) NormalizedTargetModel() string {
+	return strings.TrimSpace(c.TargetModel)
+}
+
+func (c *ImageUpscaleConfig) EffectiveTimeoutSeconds() int {
+	if c.TimeoutSeconds <= 0 {
+		return defaultImageUpscaleTimeoutSeconds
+	}
+	return min(c.TimeoutSeconds, maxImageUpscaleTimeoutSeconds)
+}
+
+// Validate is the save-time check. A disabled config may stay incomplete so
+// administrators can stage it; an enabled config must be actionable.
+func (c *ImageUpscaleConfig) Validate() error {
+	if c == nil || !c.Enabled {
+		return nil
+	}
+	if c.TargetChannelID <= 0 {
+		return fmt.Errorf("image_upscale.target_channel_id must be a positive channel id")
+	}
+	if c.NormalizedTargetModel() == "" {
+		return fmt.Errorf("image_upscale.target_model is required")
+	}
+	if len(c.NormalizedTargetModel()) > maxImageUpscaleModelLength {
+		return fmt.Errorf("image_upscale.target_model must not exceed %d characters", maxImageUpscaleModelLength)
+	}
+	switch strings.ToLower(strings.TrimSpace(c.OnError)) {
+	case "", ImageUpscaleOnErrorFallback, ImageUpscaleOnErrorFail:
+	default:
+		return fmt.Errorf("image_upscale.on_error is invalid: %s", c.OnError)
+	}
+	if c.TimeoutSeconds < 0 || c.TimeoutSeconds > maxImageUpscaleTimeoutSeconds {
+		return fmt.Errorf("image_upscale.timeout_seconds must be between 0 and %d", maxImageUpscaleTimeoutSeconds)
+	}
+	return nil
+}
+
 type ChannelOtherSettings struct {
 	RuntimeAutomaticDisableOverrideEnabled bool   `json:"runtime_automatic_disable_override_enabled,omitempty"`
 	RuntimeAutomaticDisableStatusCodes     string `json:"runtime_automatic_disable_status_codes,omitempty"`
@@ -388,6 +462,7 @@ type ChannelOtherSettings struct {
 	AdvancedCustom                        *AdvancedCustomConfig `json:"advanced_custom,omitempty"`
 	BillingQuery                          *BillingQueryConfig   `json:"billing_query,omitempty"`
 	RatioProbe                            *RatioProbeConfig     `json:"ratio_probe,omitempty"`
+	ImageUpscale                          *ImageUpscaleConfig   `json:"image_upscale,omitempty"`
 	// OllamaOpenAIChat routes Ollama chat completions to the OpenAI-compatible
 	// /v1/chat/completions endpoint. When unset, chat completions keep using
 	// the native /api/chat protocol.

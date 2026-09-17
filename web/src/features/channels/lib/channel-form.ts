@@ -228,6 +228,21 @@ const billingQuerySchema = z.object({
   use_api_key: z.boolean().optional(),
 })
 
+export const IMAGE_UPSCALE_ON_ERROR_FALLBACK = 'fallback'
+export const IMAGE_UPSCALE_ON_ERROR_FAIL = 'fail'
+export const IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS = 300
+export const IMAGE_UPSCALE_MAX_TIMEOUT_SECONDS = 3600
+
+const imageUpscaleSchema = z.object({
+  enabled: z.boolean().optional(),
+  target_channel_id: z.number().int().optional(),
+  target_model: z.string().optional(),
+  on_error: z
+    .enum(['', IMAGE_UPSCALE_ON_ERROR_FALLBACK, IMAGE_UPSCALE_ON_ERROR_FAIL])
+    .optional(),
+  timeout_seconds: z.number().int().optional(),
+})
+
 const ratioProbeSchema = z.object({
   enabled: z.boolean().optional(),
   source: z
@@ -435,6 +450,7 @@ export const channelFormSchema = z
     advanced_custom: z.string().optional(),
     billing_query: billingQuerySchema.optional(),
     ratio_probe: ratioProbeSchema.optional(),
+    image_upscale: imageUpscaleSchema.optional(),
     other: z.string().optional(),
     // Multi-key options (not sent to backend directly)
     multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
@@ -495,6 +511,36 @@ export const channelFormSchema = z
 
     if (data.ratio_probe?.enabled) {
       validateRatioProbeForm(data.ratio_probe, ctx)
+    }
+
+    if (data.image_upscale?.enabled) {
+      const upscale = data.image_upscale
+      if (
+        !upscale.target_channel_id ||
+        upscale.target_channel_id < 1 ||
+        !Number.isInteger(upscale.target_channel_id)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['image_upscale', 'target_channel_id'],
+          message: 'Image upscale target channel ID must be a positive integer',
+        })
+      }
+      if (!upscale.target_model?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['image_upscale', 'target_model'],
+          message: 'Image upscale target model is required',
+        })
+      }
+      const timeout = upscale.timeout_seconds ?? 0
+      if (timeout < 0 || timeout > IMAGE_UPSCALE_MAX_TIMEOUT_SECONDS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['image_upscale', 'timeout_seconds'],
+          message: 'Image upscale timeout must be between 0 and 3600 seconds',
+        })
+      }
     }
 
     if (data.runtime_automatic_disable_override_enabled) {
@@ -726,6 +772,13 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
     use_api_key: true,
     authorization: '',
   },
+  image_upscale: {
+    enabled: false,
+    target_channel_id: 0,
+    target_model: '',
+    on_error: IMAGE_UPSCALE_ON_ERROR_FALLBACK,
+    timeout_seconds: IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS,
+  },
 }
 
 type RatioProbeFormValues = {
@@ -818,6 +871,45 @@ function normalizeBillingQueryFormValues(
   }
 }
 
+type ImageUpscaleFormValues = z.infer<typeof imageUpscaleSchema>
+
+const DEFAULT_IMAGE_UPSCALE_FORM_VALUES: ImageUpscaleFormValues = {
+  enabled: false,
+  target_channel_id: 0,
+  target_model: '',
+  on_error: IMAGE_UPSCALE_ON_ERROR_FALLBACK,
+  timeout_seconds: IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS,
+}
+
+function normalizeImageUpscaleFormValues(value: unknown): ImageUpscaleFormValues {
+  if (!isJsonObjectValue(value)) {
+    return { ...DEFAULT_IMAGE_UPSCALE_FORM_VALUES }
+  }
+
+  const onError =
+    value.on_error === IMAGE_UPSCALE_ON_ERROR_FAIL
+      ? IMAGE_UPSCALE_ON_ERROR_FAIL
+      : IMAGE_UPSCALE_ON_ERROR_FALLBACK
+  const targetChannelId =
+    typeof value.target_channel_id === 'number' &&
+    Number.isFinite(value.target_channel_id)
+      ? Math.trunc(value.target_channel_id)
+      : 0
+  const timeoutSeconds =
+    typeof value.timeout_seconds === 'number' &&
+    Number.isFinite(value.timeout_seconds)
+      ? Math.trunc(value.timeout_seconds)
+      : IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS
+
+  return {
+    enabled: value.enabled === true,
+    target_channel_id: targetChannelId,
+    target_model: typeof value.target_model === 'string' ? value.target_model : '',
+    on_error: onError,
+    timeout_seconds: timeoutSeconds,
+  }
+}
+
 // ============================================================================
 // Transform Functions
 // ============================================================================
@@ -894,6 +986,7 @@ export function transformChannelToFormDefaults(
   let emptyResponseRetryInPlace = true
   let billingQuery = { ...DEFAULT_BILLING_QUERY_FORM_VALUES }
   let ratioProbe = { ...DEFAULT_RATIO_PROBE_FORM_VALUES }
+  let imageUpscale = { ...DEFAULT_IMAGE_UPSCALE_FORM_VALUES }
 
   if (channel.settings) {
     try {
@@ -925,6 +1018,7 @@ export function transformChannelToFormDefaults(
       }
       billingQuery = normalizeBillingQueryFormValues(parsed.billing_query)
       ratioProbe = normalizeRatioProbeFormValues(parsed.ratio_probe)
+      imageUpscale = normalizeImageUpscaleFormValues(parsed.image_upscale)
       automaticDisableOverrideEnabled =
         parsed.runtime_automatic_disable_override_enabled === true ||
         parsed.automatic_disable_override_enabled === true
@@ -994,6 +1088,7 @@ export function transformChannelToFormDefaults(
     advanced_custom: advancedCustom,
     billing_query: billingQuery,
     ratio_probe: ratioProbe,
+    image_upscale: imageUpscale,
     runtime_automatic_disable_override_enabled: automaticDisableOverrideEnabled,
     runtime_automatic_disable_status_codes: automaticDisableStatusCodes,
     runtime_automatic_disable_keywords: automaticDisableKeywords,
@@ -1230,6 +1325,28 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
   }
 
   applyRatioProbeSettings(settingsObj, formData)
+
+  const upscale = formData.image_upscale
+  if (upscale?.enabled) {
+    settingsObj.image_upscale = {
+      enabled: true,
+      target_channel_id:
+        upscale.target_channel_id && upscale.target_channel_id > 0
+          ? Math.trunc(upscale.target_channel_id)
+          : 0,
+      target_model: upscale.target_model?.trim() || '',
+      on_error:
+        upscale.on_error === IMAGE_UPSCALE_ON_ERROR_FAIL
+          ? IMAGE_UPSCALE_ON_ERROR_FAIL
+          : IMAGE_UPSCALE_ON_ERROR_FALLBACK,
+      timeout_seconds:
+        upscale.timeout_seconds && upscale.timeout_seconds > 0
+          ? Math.trunc(upscale.timeout_seconds)
+          : IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS,
+    }
+  } else if ('image_upscale' in settingsObj) {
+    delete settingsObj.image_upscale
+  }
 
   return JSON.stringify(settingsObj)
 }
