@@ -59,6 +59,10 @@ const (
 	ErrorCodeChannelAwsClientError        ErrorCode = "channel:aws_client_error"
 	ErrorCodeChannelInvalidKey            ErrorCode = "channel:invalid_key"
 	ErrorCodeChannelResponseTimeExceeded  ErrorCode = "channel:response_time_exceeded"
+	// ErrorCodeChannelStreamTimeout marks an upstream stream that hit the idle
+	// timer before producing any data line, so nothing reached the client and
+	// another channel or mapping target can be tried.
+	ErrorCodeChannelStreamTimeout ErrorCode = "channel:stream_timeout"
 
 	// client request error
 	ErrorCodeReadRequestBodyFailed ErrorCode = "read_request_body_failed"
@@ -371,6 +375,33 @@ func IsChannelError(err *NewAPIError) bool {
 		return false
 	}
 	return strings.HasPrefix(string(err.errorCode), "channel:")
+}
+
+// IsStreamStallError reports whether err is the failure synthesized when an
+// upstream stream hit the idle timer before any data line arrived.
+func IsStreamStallError(err *NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return err.errorCode == ErrorCodeChannelStreamTimeout
+}
+
+// IsModelMissingError reports whether err looks like the upstream no longer
+// serving the requested model (404 model_not_found and equivalents). Such
+// errors are deterministic for the (channel, model) pair, so scheduling treats
+// them differently from transient failures.
+func IsModelMissingError(err *NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	if err.errorCode == ErrorCodeModelNotFound {
+		return true
+	}
+	if err.StatusCode != http.StatusNotFound {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "model") || strings.Contains(text, "no endpoints")
 }
 
 func IsSkipRetryError(err *NewAPIError) bool {

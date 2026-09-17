@@ -276,7 +276,27 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		service.RecordChannelAttemptOutcome(channel.Id, attemptedModel, newAPIError != nil)
 		if newAPIError == nil && relayInfo.IsStream && relayInfo.HasSendResponse() {
-			service.RecordChannelSlowFirstByte(channel.Id, attemptedModel, relayInfo.FirstResponseTime.Sub(attemptStart))
+			ttft := relayInfo.FirstResponseTime.Sub(attemptStart)
+			service.RecordChannelSlowFirstByte(channel.Id, attemptedModel, ttft)
+			// Selection weighting is keyed by the requested model name.
+			model.RecordChannelTtft(channel.Id, relayInfo.OriginModelName, ttft)
+		}
+		if newAPIError != nil {
+			// A stream that hung before its first byte must not absorb more
+			// requests while the failure streak is still below the threshold.
+			if types.IsStreamStallError(newAPIError) {
+				service.RecordChannelFirstByteStall(channel.Id, attemptedModel)
+			}
+			// A model the upstream no longer serves gets a much longer skip;
+			// single-entry mappings also cover the requested name so channel
+			// selection avoids the pair outright.
+			if types.IsModelMissingError(newAPIError) {
+				missingModels := []string{attemptedModel}
+				if len(modelMappingQueue) <= 1 && attemptedModel != relayInfo.OriginModelName {
+					missingModels = append(missingModels, relayInfo.OriginModelName)
+				}
+				service.RecordChannelModelMissing(channel.Id, missingModels...)
+			}
 		}
 
 		// The first attempt is the user's real request hitting its routed
@@ -834,6 +854,19 @@ func executeTaskSubmissionWith(
 				attemptedModel = modelMappingQueue[queueEntryIndex].UpstreamModel
 			}
 			service.RecordChannelAttemptOutcome(channel.Id, attemptedModel, taskErr != nil)
+			// A model the upstream no longer serves gets a much longer skip;
+			// single-entry mappings also cover the requested name so channel
+			// selection avoids the pair outright.
+			if taskErr != nil {
+				classified := types.NewErrorWithStatusCode(errors.New(taskErr.Message), types.ErrorCode(taskErr.Code), taskErr.StatusCode)
+				if types.IsModelMissingError(classified) {
+					missingModels := []string{attemptedModel}
+					if len(modelMappingQueue) <= 1 && attemptedModel != relayInfo.OriginModelName {
+						missingModels = append(missingModels, relayInfo.OriginModelName)
+					}
+					service.RecordChannelModelMissing(channel.Id, missingModels...)
+				}
+			}
 		}
 		// The first attempt is the user's real request; only upstream failures
 		// of that attempt feed the user breaker (local errors are not the

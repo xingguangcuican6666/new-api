@@ -230,15 +230,27 @@ func GetRandomSatisfiedChannel(
 		smoothingFactor = 100
 	}
 
-	// Calculate the total weight of all channels up to endIdx
-	totalWeight := sumWeight * smoothingFactor
+	// Effective per-channel weights: the admin weight after smoothing,
+	// demoted (to a floor of 1) for pairs whose recent first-byte latency is
+	// slower than the model average, so faster channels in the tier are
+	// preferred without excluding anyone.
+	effectiveWeights := make([]int, len(targetChannels))
+	totalWeight := 0
+	for i, channel := range targetChannels {
+		weight := channel.GetWeight()*smoothingFactor + smoothingAdjustment
+		if latencyWeight := ChannelLatencyWeight(channel.Id, model); latencyWeight < 1 {
+			weight = max(int(float64(weight)*latencyWeight), 1)
+		}
+		effectiveWeights[i] = weight
+		totalWeight += weight
+	}
 
 	// Generate a random value in the range [0, totalWeight)
 	randomWeight := rand.Intn(totalWeight)
 
 	// Find a channel based on its weight
-	for _, channel := range targetChannels {
-		randomWeight -= channel.GetWeight()*smoothingFactor + smoothingAdjustment
+	for i, channel := range targetChannels {
+		randomWeight -= effectiveWeights[i]
 		if randomWeight < 0 {
 			return channel, nil
 		}

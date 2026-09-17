@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -582,4 +583,107 @@ func TestNewStreamScannerCallerLimit(t *testing.T) {
 	require.True(t, scanner.Scan())
 	assert.Equal(t, "data: ok", scanner.Text())
 	require.NoError(t, scanner.Err())
+}
+
+// ---------- First-byte stall detection ----------
+
+func TestStreamStalledBeforeFirstByte(t *testing.T) {
+	now := time.Now()
+	stalled := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+	stalled.StreamStatus = relaycommon.NewStreamStatus()
+	stalled.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+	assert.True(t, StreamStalledBeforeFirstByte(stalled))
+
+	produced := &relaycommon.RelayInfo{
+		ChannelMeta:       &relaycommon.ChannelMeta{},
+		StartTime:         now,
+		FirstResponseTime: now.Add(time.Second),
+	}
+	produced.StreamStatus = relaycommon.NewStreamStatus()
+	produced.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+	assert.False(t, StreamStalledBeforeFirstByte(produced), "a stream that produced output is not a stall")
+
+	ended := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+	ended.StreamStatus = relaycommon.NewStreamStatus()
+	ended.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+	assert.False(t, StreamStalledBeforeFirstByte(ended))
+	assert.False(t, StreamStalledBeforeFirstByte(nil))
+}
+
+func TestStreamScannerHandler_PreFirstByteDeadline(t *testing.T) {
+	// Not parallel: modifies global knobs.
+	oldTimeout := constant.StreamingTimeout
+	oldSlow := common.ChannelSlowFirstByteSeconds
+	constant.StreamingTimeout = 30
+	common.ChannelSlowFirstByteSeconds = 1
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		common.ChannelSlowFirstByteSeconds = oldSlow
+	})
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { pw.Close() })
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	resp := &http.Response{Body: pr}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	start := time.Now()
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("silent upstream must hit the first-byte deadline, not the full streaming timeout")
+	}
+	assert.Less(t, time.Since(start), 5*time.Second)
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+	assert.True(t, StreamStalledBeforeFirstByte(info), "a silent stream is a stall and can be retried elsewhere")
+}
+
+func TestStreamScannerHandler_FirstByteRestoresFullIdleTimeout(t *testing.T) {
+	// Not parallel: modifies global knobs.
+	oldTimeout := constant.StreamingTimeout
+	oldSlow := common.ChannelSlowFirstByteSeconds
+	constant.StreamingTimeout = 30
+	common.ChannelSlowFirstByteSeconds = 1
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		common.ChannelSlowFirstByteSeconds = oldSlow
+	})
+
+	pr, pw := io.Pipe()
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	resp := &http.Response{Body: pr}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+	info.ResetFirstResponseTracking()
+
+	go func() {
+		fmt.Fprint(pw, "data: {\"id\":1}\n")
+		time.Sleep(2 * time.Second) // longer than the 1s first-byte deadline...
+		fmt.Fprint(pw, "data: [DONE]\n")
+		pw.Close()
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for stream completion")
+	}
+	assert.False(t, StreamStalledBeforeFirstByte(info), "a stream past its first byte is not a stall")
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
 }

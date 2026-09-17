@@ -217,6 +217,14 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		}
 	})
 
+	// A stream that hit the idle timer before its first data line produced
+	// nothing; nothing has reached the client, so fail the attempt and let the
+	// retry loop move to the next channel or mapping target.
+	if helper.StreamStalledBeforeFirstByte(info) {
+		return nil, types.NewErrorWithStatusCode(errors.New("upstream stream stalled before first byte"),
+			types.ErrorCodeChannelStreamTimeout, http.StatusBadGateway)
+	}
+
 	if !hasBillableUsageMetadata {
 		if info.ReceivedResponseCount > 0 {
 			usage = service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())

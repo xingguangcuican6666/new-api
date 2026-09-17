@@ -21,6 +21,7 @@ func setupChannelCooldownTest(t *testing.T) *int64 {
 	common.ChannelCooldownBaseSeconds = 30
 	common.ChannelCooldownMaxSeconds = 1800
 	common.ChannelSlowFirstByteSeconds = 120
+	common.ChannelModelMissingCooldownSeconds = 3600
 	t.Cleanup(func() {
 		channelCooldownStatesMu.Lock()
 		channelCooldownStates = make(map[channelModelKey]*channelModelState)
@@ -130,6 +131,62 @@ func TestChannelCooldownIsolatesModelAndChannel(t *testing.T) {
 	assert.False(t, ChannelInErrorCooldown(43, "gpt-4o"), "other channels stay usable")
 	assert.Empty(t, CooldownExcludedChannelIds("claude-3"))
 	assert.Equal(t, []int{42}, CooldownExcludedChannelIds("gpt-4o"))
+}
+
+func TestChannelModelMissingArmsLongSkip(t *testing.T) {
+	now := setupChannelCooldownTest(t)
+
+	// A single miss is not enough evidence to lock the pair out.
+	RecordChannelModelMissing(42, "gpt-4o")
+	assert.False(t, ChannelInErrorCooldown(42, "gpt-4o"))
+
+	// The second consecutive miss skips the pair for the long duration.
+	RecordChannelModelMissing(42, "gpt-4o")
+	assert.True(t, ChannelInErrorCooldown(42, "gpt-4o"))
+	assert.Equal(t, []int{42}, CooldownExcludedChannelIds("gpt-4o"))
+
+	// The missing skip outlasts even the capped failure cooldown.
+	*now += 1801
+	assert.True(t, ChannelInErrorCooldown(42, "gpt-4o"))
+	*now += 1800
+	assert.False(t, ChannelInErrorCooldown(42, "gpt-4o"))
+
+	// Duplicate names in one call count as one miss.
+	RecordChannelModelMissing(43, "dup", "dup")
+	RecordChannelModelMissing(43, "dup")
+	assert.True(t, ChannelInErrorCooldown(43, "dup"))
+}
+
+func TestChannelModelMissingClearedBySuccess(t *testing.T) {
+	setupChannelCooldownTest(t)
+
+	RecordChannelModelMissing(42, "gpt-4o")
+	RecordChannelModelMissing(42, "gpt-4o")
+	require.True(t, ChannelInErrorCooldown(42, "gpt-4o"))
+
+	// A success clears a misjudged missing skip and the miss streak.
+	RecordChannelAttemptOutcome(42, "gpt-4o", false)
+	assert.False(t, ChannelInErrorCooldown(42, "gpt-4o"))
+	assert.Empty(t, CooldownExcludedChannelIds("gpt-4o"))
+	RecordChannelModelMissing(42, "gpt-4o")
+	assert.False(t, ChannelInErrorCooldown(42, "gpt-4o"), "the miss streak must restart after a success")
+}
+
+func TestChannelFirstByteStallArmsImmediately(t *testing.T) {
+	now := setupChannelCooldownTest(t)
+
+	// A single stall arms the base skip even though the failure streak is 1.
+	RecordChannelAttemptOutcome(42, "gpt-4o", true)
+	RecordChannelFirstByteStall(42, "gpt-4o")
+	assert.True(t, ChannelInErrorCooldown(42, "gpt-4o"))
+
+	// The stall itself did not advance the streak: once the skip expires, the
+	// streak (1) is still below the threshold, so a regular failure keeps
+	// serving.
+	*now += 31
+	assert.False(t, ChannelInErrorCooldown(42, "gpt-4o"))
+	RecordChannelAttemptOutcome(42, "gpt-4o", true)
+	assert.False(t, ChannelInErrorCooldown(42, "gpt-4o"), "a stall must not double-count the streak")
 }
 
 func TestChannelCooldownDurationTable(t *testing.T) {

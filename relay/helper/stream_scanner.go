@@ -80,6 +80,16 @@ func ExtendWriteDeadline(c *gin.Context) {
 	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Now().Add(streamWriteTimeout))
 }
 
+// StreamStalledBeforeFirstByte reports whether the upstream stream ended on the
+// idle timer before any data line arrived. Nothing has been written downstream
+// in that state, so handlers can turn the attempt into a retryable error
+// instead of fabricating an empty success.
+func StreamStalledBeforeFirstByte(info *relaycommon.RelayInfo) bool {
+	return info != nil && info.StreamStatus != nil &&
+		info.StreamStatus.EndReason == relaycommon.StreamEndReasonTimeout &&
+		!info.HasSendResponse()
+}
+
 func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult)) {
 
 	if resp == nil || dataHandler == nil {
@@ -93,10 +103,24 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
 
+	// idleTimeout is the gap the stream is allowed to stay silent. Before the
+	// first data line, the slow-first-byte limit applies (when configured and
+	// shorter): a hung upstream should fail the attempt at that deadline so the
+	// retry loop can switch targets, instead of tying the request up for the
+	// full streaming timeout.
+	idleTimeout := func() time.Duration {
+		if !info.HasSendResponse() {
+			if slow := time.Duration(common.ChannelSlowFirstByteSeconds) * time.Second; slow > 0 && slow < streamingTimeout {
+				return slow
+			}
+		}
+		return streamingTimeout
+	}
+
 	var (
 		stopChan    = make(chan bool, 3) // 增加缓冲区避免阻塞
 		scanner     = NewStreamScanner(resp.Body)
-		ticker      = time.NewTicker(streamingTimeout)
+		ticker      = time.NewTicker(idleTimeout())
 		pingTicker  *time.Ticker
 		writeMutex  sync.Mutex     // Mutex to protect concurrent writes
 		wg          sync.WaitGroup // 用于等待所有 goroutine 退出
@@ -253,7 +277,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			default:
 			}
 
-			ticker.Reset(streamingTimeout)
+			ticker.Reset(idleTimeout())
 			data := scanner.Text()
 			logger.LogDebug(c, "stream scanner data: %s", data)
 
@@ -271,6 +295,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			if !strings.HasPrefix(data, "[DONE]") {
 				info.SetFirstResponseTime()
 				info.ReceivedResponseCount++
+				if info.ReceivedResponseCount == 1 {
+					// The first data line moves the deadline to the full idle
+					// timeout; only the wait for the first byte is bounded by
+					// the slow-first-byte limit.
+					ticker.Reset(idleTimeout())
+				}
 
 				select {
 				case dataChan <- data:

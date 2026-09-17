@@ -164,16 +164,23 @@ func GetChannel(
 	}
 	channel := Channel{}
 	if len(abilities) > 0 {
-		// Randomly choose one
-		weightSum := uint(0)
-		for _, ability_ := range abilities {
-			weightSum += ability_.Weight + 10
+		// Weighted random choice, demoting (to a floor of 1) pairs whose
+		// recent first-byte latency is slower than the model average so
+		// faster channels are preferred without excluding anyone.
+		effectiveWeights := make([]int, len(abilities))
+		weightSum := 0
+		for i, ability_ := range abilities {
+			weight := int(ability_.Weight) + 10
+			if latencyWeight := ChannelLatencyWeight(ability_.ChannelId, model); latencyWeight < 1 {
+				weight = max(int(float64(weight)*latencyWeight), 1)
+			}
+			effectiveWeights[i] = weight
+			weightSum += weight
 		}
 		// Randomly choose one
-		weight := common.GetRandomInt(int(weightSum))
-		for _, ability_ := range abilities {
-			weight -= int(ability_.Weight) + 10
-			//log.Printf("weight: %d, ability weight: %d", weight, *ability_.Weight)
+		weight := common.GetRandomInt(weightSum)
+		for i, ability_ := range abilities {
+			weight -= effectiveWeights[i]
 			if weight <= 0 {
 				channel.Id = ability_.ChannelId
 				break

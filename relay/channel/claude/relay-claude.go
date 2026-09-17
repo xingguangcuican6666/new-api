@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -301,6 +302,13 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	})
 	if err != nil {
 		return nil, err
+	}
+	// A stream that hit the idle timer before its first data line produced
+	// nothing; nothing has reached the client, so fail the attempt and let the
+	// retry loop move to the next channel or mapping target.
+	if helper.StreamStalledBeforeFirstByte(info) {
+		return nil, types.NewErrorWithStatusCode(errors.New("upstream stream stalled before first byte"),
+			types.ErrorCodeChannelStreamTimeout, http.StatusBadGateway)
 	}
 
 	HandleStreamFinalResponse(c, info, claudeInfo)

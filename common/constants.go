@@ -131,18 +131,20 @@ var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var RuntimeAutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false
-var EmptyResponseRetryEnabled = false
+var EmptyResponseRetryEnabled = true
 var EmptyResponseRetryInPlaceEnabled = true
 var QuotaRemindThreshold = 1000
 var PreConsumedQuota = 500
 
-var RetryTimes = 0
+var RetryTimes = 3
 
 // Per-(channel, model) cooldown breaker tuning (service/channel_cooldown.go).
-var ChannelCooldownFailureThreshold = 5 // consecutive bad outcomes before the skip arms
-var ChannelCooldownBaseSeconds = 30     // initial skip duration
-var ChannelCooldownMaxSeconds = 1800    // escalation cap
-var ChannelSlowFirstByteSeconds = 90    // streaming first-byte limit (1min30s); 0 disables the slow skip
+var ChannelCooldownFailureThreshold = 5       // consecutive bad outcomes before the skip arms
+var ChannelCooldownBaseSeconds = 30           // initial skip duration
+var ChannelCooldownMaxSeconds = 1800          // escalation cap
+var ChannelSlowFirstByteSeconds = 90          // streaming first-byte limit (1min30s); 0 disables the slow skip
+var ChannelModelMissingCooldownSeconds = 3600 // model-missing (404) skip duration; 0 disables the missing skip
+var ChannelLatencyWeightingEnabled = true     // demote slow channels within a priority tier by recent TTFT
 
 //var RootUserEmail = ""
 

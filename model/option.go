@@ -178,6 +178,8 @@ func InitOptionMap() {
 	common.OptionMap["ChannelCooldownBaseSeconds"] = strconv.Itoa(common.ChannelCooldownBaseSeconds)
 	common.OptionMap["ChannelCooldownMaxSeconds"] = strconv.Itoa(common.ChannelCooldownMaxSeconds)
 	common.OptionMap["ChannelSlowFirstByteSeconds"] = strconv.Itoa(common.ChannelSlowFirstByteSeconds)
+	common.OptionMap["ChannelModelMissingCooldownSeconds"] = strconv.Itoa(common.ChannelModelMissingCooldownSeconds)
+	common.OptionMap["ChannelLatencyWeightingEnabled"] = strconv.FormatBool(common.ChannelLatencyWeightingEnabled)
 	common.OptionMap["DataExportInterval"] = strconv.Itoa(common.DataExportInterval)
 	common.OptionMap["DataExportDefaultTime"] = common.DataExportDefaultTime
 	common.OptionMap["DefaultCollapseSidebar"] = strconv.FormatBool(common.DefaultCollapseSidebar)
@@ -415,6 +417,8 @@ func updateOptionMap(key string, value string) (err error) {
 			common.EmptyResponseRetryEnabled = boolValue
 		case "EmptyResponseRetryInPlaceEnabled":
 			common.EmptyResponseRetryInPlaceEnabled = boolValue
+		case "ChannelLatencyWeightingEnabled":
+			common.ChannelLatencyWeightingEnabled = boolValue
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
 		case "SanitizeUpstreamErrorEnabled":
@@ -655,6 +659,8 @@ func updateOptionMap(key string, value string) (err error) {
 		common.ChannelCooldownMaxSeconds, _ = strconv.Atoi(value)
 	case "ChannelSlowFirstByteSeconds":
 		common.ChannelSlowFirstByteSeconds, _ = strconv.Atoi(value)
+	case "ChannelModelMissingCooldownSeconds":
+		common.ChannelModelMissingCooldownSeconds, _ = strconv.Atoi(value)
 	case "DataExportInterval":
 		common.DataExportInterval, _ = strconv.Atoi(value)
 	case "DataExportDefaultTime":

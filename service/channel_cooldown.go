@@ -21,6 +21,14 @@ import (
 // attempt resets the streak and clears the cooldown. The channel status itself
 // is never changed — the skip is advisory and expires on its own.
 //
+// Model-missing errors (upstream 404 model_not_found and equivalents) are
+// deterministic for the pair, so after channelModelMissingThreshold of them in
+// a row the pair is skipped for the much longer
+// common.ChannelModelMissingCooldownSeconds instead of the escalating failure
+// cooldown, keeping requests away from a model the channel no longer serves
+// without disabling the channel. A success clears it, so a misjudged pair
+// recovers on its next attempt.
+//
 // Stale entries are dropped by a background janitor so the map cannot grow
 // with retired channel/model combinations.
 
@@ -33,6 +41,8 @@ type channelModelState struct {
 	badStreak     int
 	lastBadAt     int64 // unix seconds
 	cooldownUntil int64 // unix seconds
+	missingStreak int
+	missingUntil  int64 // unix seconds
 }
 
 var (
@@ -55,7 +65,7 @@ func cleanupChannelCooldownStates() {
 		now := channelCooldownClock()
 		channelCooldownStatesMu.Lock()
 		for key, state := range channelCooldownStates {
-			if now >= state.cooldownUntil && now-state.lastBadAt > channelCooldownJanitorTTL {
+			if now >= state.cooldownUntil && now >= state.missingUntil && now-state.lastBadAt > channelCooldownJanitorTTL {
 				delete(channelCooldownStates, key)
 			}
 		}
@@ -137,10 +147,86 @@ func resetChannelCooldown(channelId int, modelName string) {
 	}
 	state.badStreak = 0
 	state.cooldownUntil = 0
+	state.missingStreak = 0
+	state.missingUntil = 0
+}
+
+// RecordChannelFirstByteStall arms the base cooldown immediately after an
+// attempt hit the first-byte deadline without producing any data. The failure
+// streak is already counted by RecordChannelAttemptOutcome, so this only moves
+// the cooldown forward — a hung upstream must not absorb more requests while
+// the streak is still below the failure threshold.
+func RecordChannelFirstByteStall(channelId int, modelName string) {
+	if channelId <= 0 {
+		return
+	}
+	channelCooldownStatesMu.Lock()
+	defer channelCooldownStatesMu.Unlock()
+	key := channelModelKey{channelId: channelId, model: modelName}
+	state := channelCooldownStates[key]
+	if state == nil {
+		state = &channelModelState{}
+		channelCooldownStates[key] = state
+	}
+	now := channelCooldownClock()
+	if base := time.Duration(common.ChannelCooldownBaseSeconds) * time.Second; base > 0 {
+		if until := now + int64(base.Seconds()); until > state.cooldownUntil {
+			state.cooldownUntil = until
+		}
+	}
+	state.lastBadAt = now
+}
+
+// channelModelMissingThreshold is how many consecutive model-missing errors
+// arm the long per-model skip; two keep a single false positive from locking a
+// serving pair out for an hour.
+const channelModelMissingThreshold = 2
+
+// RecordChannelModelMissing feeds a model-missing upstream error (404
+// model_not_found and equivalents) into the (channel, model) pairs. Once a
+// pair accumulates channelModelMissingThreshold consecutive misses it is
+// skipped for common.ChannelModelMissingCooldownSeconds. Attempts are keyed by
+// the upstream model actually used; callers pass additional keys (e.g. the
+// origin model of a single-entry mapping) when selection-time exclusion should
+// cover them too.
+func RecordChannelModelMissing(channelId int, modelNames ...string) {
+	if channelId <= 0 {
+		return
+	}
+	seen := make(map[string]struct{}, len(modelNames))
+	channelCooldownStatesMu.Lock()
+	defer channelCooldownStatesMu.Unlock()
+	now := channelCooldownClock()
+	for _, modelName := range modelNames {
+		if modelName == "" {
+			continue
+		}
+		if _, dup := seen[modelName]; dup {
+			continue
+		}
+		seen[modelName] = struct{}{}
+		key := channelModelKey{channelId: channelId, model: modelName}
+		state := channelCooldownStates[key]
+		if state == nil {
+			state = &channelModelState{}
+			channelCooldownStates[key] = state
+		}
+		state.missingStreak++
+		state.lastBadAt = now
+		if state.missingStreak < channelModelMissingThreshold {
+			continue
+		}
+		if cooldown := time.Duration(common.ChannelModelMissingCooldownSeconds) * time.Second; cooldown > 0 {
+			if until := now + int64(cooldown.Seconds()); until > state.missingUntil {
+				state.missingUntil = until
+			}
+		}
+	}
 }
 
 // ChannelInErrorCooldown reports whether the channel is temporarily skipped
-// for the given model.
+// for the given model, either by the failure cooldown or the long
+// model-missing skip.
 func ChannelInErrorCooldown(channelId int, modelName string) bool {
 	if channelId <= 0 {
 		return false
@@ -148,7 +234,11 @@ func ChannelInErrorCooldown(channelId int, modelName string) bool {
 	channelCooldownStatesMu.Lock()
 	defer channelCooldownStatesMu.Unlock()
 	state := channelCooldownStates[channelModelKey{channelId: channelId, model: modelName}]
-	return state != nil && channelCooldownClock() < state.cooldownUntil
+	if state == nil {
+		return false
+	}
+	now := channelCooldownClock()
+	return now < state.cooldownUntil || now < state.missingUntil
 }
 
 // CooldownExcludedChannelIds lists the channels currently skipped for the
@@ -159,7 +249,7 @@ func CooldownExcludedChannelIds(modelName string) []int {
 	now := channelCooldownClock()
 	var excluded []int
 	for key, state := range channelCooldownStates {
-		if key.model == modelName && now < state.cooldownUntil {
+		if key.model == modelName && (now < state.cooldownUntil || now < state.missingUntil) {
 			excluded = append(excluded, key.channelId)
 		}
 	}
