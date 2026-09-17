@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -69,7 +70,7 @@ func TestProcessChannelErrorUsesSnapshotWithoutLeakingChannelMetadata(t *testing
 	}
 	apiErr := types.NewOpenAIError(errors.New("upstream failed"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway)
 
-	processChannelError(ctx, channelSnapshot, apiErr, nil, false, nil)
+	service.ProcessChannelError(ctx, channelSnapshot, apiErr, nil, false, nil)
 
 	var stored model.Log
 	require.NoError(t, database.First(&stored).Error)

@@ -42,6 +42,7 @@ type DialogType =
   | 'ratio-probe'
   | 'fetch-models'
   | 'ollama-models'
+  | 'inference-status'
   | 'multi-key-manage'
   | 'tag-batch-edit'
   | 'edit-tag'
