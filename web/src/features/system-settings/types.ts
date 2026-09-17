@@ -381,6 +381,7 @@ export type OperationsSettings = {
   DemoSiteEnabled: boolean
   SelfUseModeEnabled: boolean
   SanitizeUpstreamErrorEnabled: boolean
+  UpstreamPrivacyProtectionEnabled: boolean
   QuotaRemindThreshold: string
   SMTPServer: string
   SMTPPort: string

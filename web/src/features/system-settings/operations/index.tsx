@@ -31,6 +31,7 @@ const defaultOperationsSettings: OperationsSettings = {
   DemoSiteEnabled: false,
   SelfUseModeEnabled: false,
   SanitizeUpstreamErrorEnabled: false,
+  UpstreamPrivacyProtectionEnabled: false,
   QuotaRemindThreshold: '',
   SMTPServer: '',
   SMTPPort: '',

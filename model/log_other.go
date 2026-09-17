@@ -6,12 +6,18 @@ import (
 	"slices"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting"
 )
 
 const (
 	logOtherAdminInfoKey = "admin_info"
 	logOtherRootInfoKey  = "root_info"
 	logOtherAuditInfoKey = "audit_info"
+	// Model mapping fields are public by default (log owners see which
+	// upstream model served their request) and become user-hidden when
+	// setting.UpstreamPrivacyProtectionEnabled is on.
+	logOtherIsModelMappedKey     = "is_model_mapped"
+	logOtherUpstreamModelNameKey = "upstream_model_name"
 )
 
 // legacySensitiveLogOtherKeys are historical top-level fields that must never
@@ -237,6 +243,14 @@ func formatLogOtherJSON(value string, visibility logOtherVisibility) string {
 			if _, exists := values[key]; exists {
 				delete(values, key)
 				changed = true
+			}
+		}
+		if setting.UpstreamPrivacyProtectionEnabled {
+			for _, key := range []string{logOtherIsModelMappedKey, logOtherUpstreamModelNameKey} {
+				if _, exists := values[key]; exists {
+					delete(values, key)
+					changed = true
+				}
 			}
 		}
 	} else {

@@ -38,6 +38,8 @@ const OPERATIONS_SECTIONS = [
           SelfUseModeEnabled: settings.SelfUseModeEnabled,
           SanitizeUpstreamErrorEnabled:
             settings.SanitizeUpstreamErrorEnabled,
+          UpstreamPrivacyProtectionEnabled:
+            settings.UpstreamPrivacyProtectionEnabled,
         }}
       />
     ),

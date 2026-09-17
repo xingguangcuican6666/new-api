@@ -45,6 +45,7 @@ const behaviorSchema = z.object({
   DemoSiteEnabled: z.boolean(),
   SelfUseModeEnabled: z.boolean(),
   SanitizeUpstreamErrorEnabled: z.boolean(),
+  UpstreamPrivacyProtectionEnabled: z.boolean(),
 })
 
 type BehaviorFormValues = z.infer<typeof behaviorSchema>
@@ -156,6 +157,29 @@ export function SystemBehaviorSection({
                   <FormLabel>{t('Sanitize Upstream Errors')}</FormLabel>
                   <FormDescription>
                     {t('Hide upstream error details from client responses')}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='UpstreamPrivacyProtectionEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Upstream Channel Privacy')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Hide model mapping details from user logs; administrators can still view them'
+                    )}
                   </FormDescription>
                 </SettingsSwitchContent>
                 <FormControl>

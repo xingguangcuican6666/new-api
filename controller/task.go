@@ -17,6 +17,7 @@ import (
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
@@ -415,7 +416,7 @@ func tasksToDto(tasks []*model.Task, fillUser bool, viewerRole int) []*dto.TaskD
 				task.Username = user.Username
 			}
 		}
-		item := relay.TaskModel2Dto(task)
+		item := relay.TaskModel2Dto(task, setting.UpstreamPrivacyProtectionEnabled && viewerRole < common.RoleAdminUser)
 		item.LegacyVideoAvailable = legacyVideoAvailable(task)
 		if task.Status == model.TaskStatusSuccess {
 			item.ResultURL = ""

@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -134,4 +135,36 @@ func TestTaskLogDTOKeepsFailureReasonAndDoesNotMarkPluginTaskLegacy(t *testing.T
 	assert.False(t, pluginView.LegacyVideoAvailable)
 	assert.Empty(t, pluginView.ResultURL)
 	assert.Empty(t, pluginView.FailReason)
+}
+
+func TestTaskLogDTOHidesUpstreamModelMappingUnderPrivacyProtection(t *testing.T) {
+	origPrivacy := setting.UpstreamPrivacyProtectionEnabled
+	defer func() { setting.UpstreamPrivacyProtectionEnabled = origPrivacy }()
+
+	task := &model.Task{
+		TaskID:   "task_model_mapped",
+		Platform: "suno",
+		Properties: model.Properties{
+			OriginModelName:   "public-model",
+			UpstreamModelName: "upstream-secret-model",
+		},
+	}
+
+	setting.UpstreamPrivacyProtectionEnabled = true
+
+	userJSON, err := common.Marshal(tasksToDto([]*model.Task{task}, false, common.RoleCommonUser)[0])
+	require.NoError(t, err)
+	assert.NotContains(t, string(userJSON), "upstream-secret-model")
+	assert.NotContains(t, string(userJSON), "upstream_model_name")
+	assert.Contains(t, string(userJSON), "public-model")
+
+	adminJSON, err := common.Marshal(tasksToDto([]*model.Task{task}, false, common.RoleAdminUser)[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(adminJSON), "upstream-secret-model")
+
+	setting.UpstreamPrivacyProtectionEnabled = false
+
+	openJSON, err := common.Marshal(tasksToDto([]*model.Task{task}, false, common.RoleCommonUser)[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(openJSON), "upstream-secret-model")
 }

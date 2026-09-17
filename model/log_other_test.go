@@ -3,6 +3,7 @@ package model
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -81,4 +82,33 @@ func TestLogOtherJSONStringDoesNotMutateReceiver(t *testing.T) {
 
 	require.Equal(t, before, after)
 	require.Equal(t, first, second)
+}
+
+func TestFormatLogOtherJSONModelMappingPrivacy(t *testing.T) {
+	origPrivacy := setting.UpstreamPrivacyProtectionEnabled
+	defer func() { setting.UpstreamPrivacyProtectionEnabled = origPrivacy }()
+
+	mappedOther := func() *LogOther {
+		other := NewLogOther()
+		require.True(t, other.SetPublic("is_model_mapped", true))
+		require.True(t, other.SetPublic("upstream_model_name", "upstream-secret-model"))
+		require.True(t, other.SetPublic("model_ratio", 1.5))
+		return other
+	}
+
+	setting.UpstreamPrivacyProtectionEnabled = false
+	assert.Contains(t, formatLogOtherJSON(mappedOther().JSONString(), logOtherVisibilityUser), "upstream-secret-model")
+
+	setting.UpstreamPrivacyProtectionEnabled = true
+	userJSON := formatLogOtherJSON(mappedOther().JSONString(), logOtherVisibilityUser)
+	assert.NotContains(t, userJSON, "is_model_mapped")
+	assert.NotContains(t, userJSON, "upstream_model_name")
+	assert.NotContains(t, userJSON, "upstream-secret-model")
+	assert.Contains(t, userJSON, "model_ratio")
+
+	adminJSON := formatLogOtherJSON(mappedOther().JSONString(), logOtherVisibilityAdmin)
+	assert.Contains(t, adminJSON, "upstream-secret-model")
+
+	rootJSON := formatLogOtherJSON(mappedOther().JSONString(), logOtherVisibilityRoot)
+	assert.Contains(t, rootJSON, "upstream-secret-model")
 }

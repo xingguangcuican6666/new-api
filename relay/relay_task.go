@@ -22,6 +22,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -511,7 +512,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	// 通用 TaskDto 格式
 	respBody, err = common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
-		Data: TaskModel2Dto(originTask),
+		Data: TaskModel2Dto(originTask, setting.UpstreamPrivacyProtectionEnabled),
 	})
 	if err != nil {
 		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
@@ -639,7 +640,15 @@ func mapTaskStatusToSimple(status model.TaskStatus) string {
 	}
 }
 
-func TaskModel2Dto(task *model.Task) *dto.TaskDto {
+// TaskModel2Dto converts a task into the dashboard/client DTO. When
+// hideUpstreamModel is true (upstream privacy protection), the model mapping
+// result in properties is dropped so only privileged viewers can see which
+// upstream model served the task.
+func TaskModel2Dto(task *model.Task, hideUpstreamModel bool) *dto.TaskDto {
+	props := task.Properties
+	if hideUpstreamModel {
+		props.UpstreamModelName = ""
+	}
 	return &dto.TaskDto{
 		ID:         task.ID,
 		CreatedAt:  task.CreatedAt,
@@ -658,7 +667,7 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		StartTime:  task.StartTime,
 		FinishTime: task.FinishTime,
 		Progress:   task.Progress,
-		Properties: task.Properties,
+		Properties: props,
 		Username:   task.Username,
 		Data:       task.Data,
 	}
