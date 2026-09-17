@@ -943,6 +943,14 @@ func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
 }
 
+// ResetFirstResponseTracking re-arms first-byte capture before a retried
+// attempt. RelayInfo is reused across the gateway-side retry loop, so the
+// previous attempt's first-response state must not leak into the next one.
+func (info *RelayInfo) ResetFirstResponseTracking() {
+	info.FirstResponseTime = info.StartTime.Add(-time.Second)
+	info.isFirstResponse = true
+}
+
 type OriginTaskRef struct {
 	TaskID         string
 	UpstreamTaskID string

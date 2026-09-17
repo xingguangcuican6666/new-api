@@ -142,7 +142,7 @@ var RetryTimes = 0
 var ChannelCooldownFailureThreshold = 5 // consecutive bad outcomes before the skip arms
 var ChannelCooldownBaseSeconds = 30     // initial skip duration
 var ChannelCooldownMaxSeconds = 1800    // escalation cap
-var ChannelSlowFirstByteSeconds = 120   // streaming first-byte limit; 0 disables the slow skip
+var ChannelSlowFirstByteSeconds = 90    // streaming first-byte limit (1min30s); 0 disables the slow skip
 
 //var RootUserEmail = ""
 

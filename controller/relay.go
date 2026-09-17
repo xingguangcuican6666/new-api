@@ -222,6 +222,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			channel = selectedChannel
 			modelMappingQueue = helper.ResolveModelMappingQueue(common.GetContextKeyString(c, constant.ContextKeyChannelModelMapping), relayInfo.OriginModelName)
 			queueEntryIndex, queueAttemptIndex = 0, 0
+			// Start on the first mapping-queue entry not in per-(channel, model)
+			// cooldown; stay on 0 when every entry is cooled (fail-open).
+			if idx := helper.FirstHealthyMappingQueueEntry(channel.Id, modelMappingQueue, 0); idx >= 0 {
+				queueEntryIndex = idx
+			}
 		}
 		addUsedChannel(c, channel.Id)
 		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
@@ -247,6 +252,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			common.SetContextKey(c, constant.ContextKeyChannelModelMappingQueue, "")
 		}
 
+		relayInfo.ResetFirstResponseTracking()
+		attemptStart := time.Now()
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
 			newAPIError = relay.WssHelper(c, relayInfo)
@@ -259,10 +266,17 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		// Every real upstream attempt feeds the per-(channel, model) cooldown
-		// breaker; a slow streaming first byte additionally arms the skip.
-		service.RecordChannelAttemptOutcome(channel.Id, relayInfo.OriginModelName, newAPIError != nil)
+		// breaker under the upstream model this attempt actually used (the
+		// mapping-queue entry when one is configured), so a bad mapped model
+		// cools down on its own without poisoning its siblings; a slow streaming
+		// first byte additionally arms the skip.
+		attemptedModel := relayInfo.OriginModelName
+		if len(modelMappingQueue) > 0 {
+			attemptedModel = modelMappingQueue[queueEntryIndex].UpstreamModel
+		}
+		service.RecordChannelAttemptOutcome(channel.Id, attemptedModel, newAPIError != nil)
 		if newAPIError == nil && relayInfo.IsStream && relayInfo.HasSendResponse() {
-			service.RecordChannelSlowFirstByte(channel.Id, relayInfo.OriginModelName, relayInfo.FirstResponseTime.Sub(relayInfo.StartTime))
+			service.RecordChannelSlowFirstByte(channel.Id, attemptedModel, relayInfo.FirstResponseTime.Sub(attemptStart))
 		}
 
 		// The first attempt is the user's real request hitting its routed
@@ -296,16 +310,20 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		// A failed mapping-queue entry moves to the next one on the same
 		// channel without consuming the channel-retry budget; once the queue
 		// is exhausted the original retry logic resumes. Skip-retry errors
-		// (request/billing side) and auto-disable triggers end the queue.
+		// (request/billing side) and auto-disable triggers end the queue. An
+		// entry that just entered cooldown (streak reached, or a slow first
+		// byte) is abandoned immediately, and already-cooled entries are
+		// passed over when advancing.
 		if newAPIError != nil && len(modelMappingQueue) > 0 && !disabledNow && !types.IsSkipRetryError(newAPIError) {
-			if queueAttemptIndex < modelMappingQueue[queueEntryIndex].Retry {
+			if queueAttemptIndex < modelMappingQueue[queueEntryIndex].Retry &&
+				!service.ChannelInErrorCooldown(channel.Id, modelMappingQueue[queueEntryIndex].UpstreamModel) {
 				queueAttemptIndex++
 				retrySameChannel = true
 				retryParam.ResetRetryNextTry()
 				continue
 			}
-			if queueEntryIndex+1 < len(modelMappingQueue) {
-				queueEntryIndex++
+			if next := helper.FirstHealthyMappingQueueEntry(channel.Id, modelMappingQueue, queueEntryIndex+1); next != -1 {
+				queueEntryIndex = next
 				queueAttemptIndex = 0
 				retrySameChannel = true
 				retryParam.ResetRetryNextTry()
@@ -733,6 +751,10 @@ func executeTaskSubmissionWith(
 	// channel-switching logic takes over.
 	var modelMappingQueue []helper.ModelMappingQueueEntry
 	queueEntryIndex, queueAttemptIndex := 0, 0
+	// queueChannelId tracks which channel the current queue and walk cursor
+	// belong to; they persist across same-channel retries so a failed entry
+	// advances instead of restarting from the top.
+	queueChannelId := 0
 	// attemptedOnce marks the very first upstream attempt of the request, the
 	// only one that feeds the per-user channel breaker.
 	attemptedOnce := false
@@ -763,8 +785,16 @@ func executeTaskSubmissionWith(
 				break
 			}
 		}
-		modelMappingQueue = helper.ResolveModelMappingQueue(common.GetContextKeyString(c, constant.ContextKeyChannelModelMapping), relayInfo.OriginModelName)
-		queueEntryIndex, queueAttemptIndex = 0, 0
+		if queueChannelId != channel.Id {
+			queueChannelId = channel.Id
+			modelMappingQueue = helper.ResolveModelMappingQueue(common.GetContextKeyString(c, constant.ContextKeyChannelModelMapping), relayInfo.OriginModelName)
+			queueEntryIndex, queueAttemptIndex = 0, 0
+			// Start on the first mapping-queue entry not in per-(channel, model)
+			// cooldown; stay on 0 when every entry is cooled (fail-open).
+			if idx := helper.FirstHealthyMappingQueueEntry(channel.Id, modelMappingQueue, 0); idx >= 0 {
+				queueEntryIndex = idx
+			}
+		}
 		diagnostics.attempt(retryParam.GetRetry()+1, channel, relayInfo.LockedChannel != nil)
 
 		addUsedChannel(c, channel.Id)
@@ -794,9 +824,16 @@ func executeTaskSubmissionWith(
 			break
 		}
 		// Every real upstream attempt feeds the per-(channel, model) cooldown
-		// breaker; local failures never reached the upstream and do not count.
+		// breaker under the upstream model this attempt actually used (the
+		// mapping-queue entry when one is configured), so a bad mapped model
+		// cools down on its own; local failures never reached the upstream and
+		// do not count.
 		if taskErr == nil || !taskErr.LocalError {
-			service.RecordChannelAttemptOutcome(channel.Id, relayInfo.OriginModelName, taskErr != nil)
+			attemptedModel := relayInfo.OriginModelName
+			if len(modelMappingQueue) > 0 {
+				attemptedModel = modelMappingQueue[queueEntryIndex].UpstreamModel
+			}
+			service.RecordChannelAttemptOutcome(channel.Id, attemptedModel, taskErr != nil)
 		}
 		// The first attempt is the user's real request; only upstream failures
 		// of that attempt feed the user breaker (local errors are not the
@@ -832,15 +869,18 @@ func executeTaskSubmissionWith(
 
 		// A failed mapping-queue entry moves to the next one on the same
 		// channel without consuming the channel-retry budget; once the queue
-		// is exhausted the original retry logic resumes.
+		// is exhausted the original retry logic resumes. An entry that just
+		// entered cooldown is abandoned immediately, and already-cooled
+		// entries are passed over when advancing.
 		if !taskErr.LocalError && len(modelMappingQueue) > 0 && !disabledNow {
-			if queueAttemptIndex < modelMappingQueue[queueEntryIndex].Retry {
+			if queueAttemptIndex < modelMappingQueue[queueEntryIndex].Retry &&
+				!service.ChannelInErrorCooldown(channel.Id, modelMappingQueue[queueEntryIndex].UpstreamModel) {
 				queueAttemptIndex++
 				retryParam.ResetRetryNextTry()
 				continue
 			}
-			if queueEntryIndex+1 < len(modelMappingQueue) {
-				queueEntryIndex++
+			if next := helper.FirstHealthyMappingQueueEntry(channel.Id, modelMappingQueue, queueEntryIndex+1); next != -1 {
+				queueEntryIndex = next
 				queueAttemptIndex = 0
 				retryParam.ResetRetryNextTry()
 				continue

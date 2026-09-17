@@ -6,6 +6,7 @@ import (
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,4 +91,28 @@ func TestModelMappedHelperAppliesQueueOverride(t *testing.T) {
 	require.NoError(t, ModelMappedHelper(c, info2, request2))
 	assert.Equal(t, "plain-upstream", info2.UpstreamModelName)
 	assert.Equal(t, "plain-upstream", request2.Model)
+}
+
+func TestFirstHealthyMappingQueueEntry(t *testing.T) {
+	queue := []ModelMappingQueueEntry{
+		{UpstreamModel: "upstream-a"},
+		{UpstreamModel: "upstream-b"},
+		{UpstreamModel: "upstream-c"},
+	}
+	const channelId = 987654321
+
+	// Without cooldowns the walk starts where it is told to.
+	assert.Equal(t, 0, FirstHealthyMappingQueueEntry(channelId, queue, 0))
+	assert.Equal(t, 2, FirstHealthyMappingQueueEntry(channelId, queue, 2))
+	assert.Equal(t, -1, FirstHealthyMappingQueueEntry(channelId, queue, len(queue)))
+	assert.Equal(t, -1, FirstHealthyMappingQueueEntry(channelId, nil, 0))
+
+	// Five consecutive failures cool one upstream model on its own, without
+	// touching its queue siblings.
+	for i := 0; i < 5; i++ {
+		service.RecordChannelAttemptOutcome(channelId, "upstream-b", true)
+	}
+	assert.Equal(t, 0, FirstHealthyMappingQueueEntry(channelId, queue, 0))
+	assert.Equal(t, 2, FirstHealthyMappingQueueEntry(channelId, queue, 1), "a cooled entry is passed over")
+	assert.Equal(t, -1, FirstHealthyMappingQueueEntry(channelId, []ModelMappingQueueEntry{{UpstreamModel: "upstream-b"}}, 0), "an all-cooled queue has no healthy entry")
 }

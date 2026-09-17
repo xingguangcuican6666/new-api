@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/service"
 	hostreasoning "github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
 )
@@ -69,6 +70,20 @@ func ResolveModelMappingQueue(mappingJSON, originModel string) []ModelMappingQue
 		}
 	}
 	return nil
+}
+
+// FirstHealthyMappingQueueEntry returns the first index at or after start whose
+// entry is not in the per-(channel, upstream-model) error cooldown, or -1 when
+// every remaining entry is currently cooled down. Callers decide the fail-open
+// fallback: initial selection stays on index 0, advancing past a failed entry
+// ends the queue walk.
+func FirstHealthyMappingQueueEntry(channelId int, queue []ModelMappingQueueEntry, start int) int {
+	for i := start; i < len(queue); i++ {
+		if !service.ChannelInErrorCooldown(channelId, queue[i].UpstreamModel) {
+			return i
+		}
+	}
+	return -1
 }
 
 func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) error {

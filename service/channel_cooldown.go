@@ -8,7 +8,10 @@ import (
 )
 
 // Per-(channel, model) cooldown breaker. Every real upstream attempt (retries
-// included) feeds its outcome into the (channel, model) pair it used; after
+// included) feeds its outcome into the (channel, model) pair it used — when a
+// channel's model mapping resolves one requested name to an ordered queue of
+// upstream models, that is the upstream model the attempt actually used, so
+// each mapped model cools down independently; after
 // common.ChannelCooldownFailureThreshold consecutive bad outcomes the pair is
 // skipped for an escalating cooldown that starts at
 // common.ChannelCooldownBaseSeconds and doubles per extra bad outcome up to
