@@ -344,6 +344,26 @@ export async function mergeChannels(
   return res.data
 }
 
+export type ConvertToMultiKeyParams = {
+  keys: string
+  multi_key_mode: 'random' | 'polling'
+}
+
+/**
+ * Convert a single-key channel into a multi-key channel by appending keys
+ */
+export async function convertChannelToMultiKey(
+  id: number,
+  params: ConvertToMultiKeyParams
+): Promise<SplitChannelResponse> {
+  const res = await api.post(
+    `/api/channel/${id}/convert_to_multi_key`,
+    params,
+    channelActionConfig()
+  )
+  return res.data
+}
+
 /**
  * Fix channel abilities
  */

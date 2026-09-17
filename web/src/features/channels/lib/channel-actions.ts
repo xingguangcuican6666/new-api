@@ -40,6 +40,7 @@ import {
   updateAllChannelsBalance,
   splitChannel,
   mergeChannels,
+  convertChannelToMultiKey,
 } from '../api'
 import { CHANNEL_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import type { ChannelTestResponse, CopyChannelParams } from '../types'
@@ -421,6 +422,33 @@ export async function handleMergeChannels(
     }
   } catch (error) {
     handleServerError(error, i18next.t('Failed to merge channels'))
+  }
+}
+
+/**
+ * Convert a single-key channel into a multi-key channel by appending keys
+ */
+export async function handleConvertChannelToMultiKey(
+  id: number,
+  params: { keys: string; multi_key_mode: 'random' | 'polling' },
+  queryClient?: QueryClient,
+  onSuccess?: () => void
+): Promise<void> {
+  try {
+    const response = await convertChannelToMultiKey(id, params)
+    if (response.success) {
+      toast.success(
+        i18next.t('Channel converted to multi-key ({{count}} keys)', {
+          count: response.data?.count ?? 0,
+        })
+      )
+      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      onSuccess?.()
+    } else {
+      handleServerError(response, i18next.t('Failed to convert channel'))
+    }
+  } catch (error) {
+    handleServerError(error, i18next.t('Failed to convert channel'))
   }
 }
 

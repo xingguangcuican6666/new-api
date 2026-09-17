@@ -35,6 +35,7 @@ import {
   Loader2,
   SlidersHorizontal,
   Split,
+  Merge,
 } from 'lucide-react'
 import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -74,6 +75,7 @@ import {
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
+import { ConvertMultiKeyDialog } from './dialogs/convert-multi-key-dialog'
 import { useChannels } from './channels-provider'
 
 interface DataTableRowActionsProps {
@@ -89,6 +91,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const currentUser = useAuthStore((s) => s.auth.user)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [splitConfirmOpen, setSplitConfirmOpen] = useState(false)
+  const [convertDialogOpen, setConvertDialogOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
 
@@ -396,6 +399,23 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
+          {/* Convert to multi-key (only for single-key channels) */}
+          {!isMultiKey && (
+            <DropdownMenuItem
+              disabled={!canEditSensitive}
+              onSelect={(e) => {
+                e.preventDefault()
+                if (!canEditSensitive) return
+                setConvertDialogOpen(true)
+              }}
+            >
+              {t('Convert to Multi-Key Channel')}
+              <DropdownMenuShortcut>
+                <Merge size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+
           <DropdownMenuSeparator />
 
           {/* Delete */}
@@ -448,6 +468,12 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             setSplitConfirmOpen(false)
           )
         }}
+      />
+
+      <ConvertMultiKeyDialog
+        channel={channel}
+        open={convertDialogOpen}
+        onOpenChange={setConvertDialogOpen}
       />
     </div>
   )

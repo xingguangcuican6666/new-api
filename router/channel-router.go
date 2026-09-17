@@ -74,6 +74,7 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/tag/models", permission: authz.ChannelRead, handler: controller.GetTagModels},
 	{method: http.MethodPost, path: "/copy/:id", permission: authz.ChannelSensitiveWrite, handler: controller.CopyChannel},
 	{method: http.MethodPost, path: "/:id/split", permission: authz.ChannelSensitiveWrite, handler: controller.SplitChannel},
+	{method: http.MethodPost, path: "/:id/convert_to_multi_key", permission: authz.ChannelSensitiveWrite, handler: controller.ConvertChannelToMultiKey},
 	{method: http.MethodPost, path: "/merge", permission: authz.ChannelSensitiveWrite, handler: controller.MergeChannels},
 	{method: http.MethodPost, path: "/multi_key/manage", permission: authz.ChannelOperate, handler: controller.ManageMultiKeys},
 	{method: http.MethodPost, path: "/upstream_updates/apply", permission: authz.ChannelWrite, handler: controller.ApplyChannelUpstreamModelUpdates},

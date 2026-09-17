@@ -1588,6 +1588,52 @@ func MergeChannels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"count": merged.ChannelInfo.MultiKeySize}})
 }
 
+// ConvertToMultiKeyRequest is the body of the single-key to multi-key
+// conversion endpoint.
+type ConvertToMultiKeyRequest struct {
+	Keys         string                `json:"keys"`
+	MultiKeyMode constant.MultiKeyMode `json:"multi_key_mode"`
+}
+
+// ConvertChannelToMultiKey turns a single-key channel into a multi-key channel
+// by appending the submitted keys after its current key.
+func ConvertChannelToMultiKey(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的渠道 ID"})
+		return
+	}
+	channel, err := model.GetChannelById(id, true)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "渠道不存在"})
+		return
+	}
+	if channel.Type == constant.ChannelTypeCodex || channel.Type == constant.ChannelTypeTaskPlugin {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "该渠道类型不支持转换为多密钥渠道"})
+		return
+	}
+	request := ConvertToMultiKeyRequest{}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := channel.ConvertToMultiKey(strings.Split(request.Keys, "\n"), request.MultiKeyMode); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	if err := channel.Update(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	recordManageAudit(c, "channel.convert_to_multi_key", map[string]any{
+		"id":       id,
+		"name":     channel.Name,
+		"keyCount": channel.ChannelInfo.MultiKeySize,
+	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"count": channel.ChannelInfo.MultiKeySize}})
+}
+
 // MultiKeyManageRequest represents the request for multi-key management operations
 type MultiKeyManageRequest struct {
 	ChannelId int    `json:"channel_id"`

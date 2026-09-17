@@ -177,3 +177,39 @@ func TestMergeTargetRequiresTwoChannels(t *testing.T) {
 	_, err = MergeTarget(nil, "", "")
 	require.Error(t, err)
 }
+
+func TestConvertToMultiKeyAppendsDeduplicatedKeys(t *testing.T) {
+	channel := &Channel{
+		Id:  9,
+		Key: "sk-first",
+		ChannelInfo: ChannelInfo{
+			MultiKeyMode: constant.MultiKeyModePolling,
+		},
+	}
+	require.NoError(t, channel.ConvertToMultiKey(
+		[]string{" sk-second ", "sk-first", "", "sk-third"}, constant.MultiKeyModeRandom))
+
+	assert.Equal(t, "sk-first\nsk-second\nsk-third", channel.Key)
+	assert.True(t, channel.ChannelInfo.IsMultiKey)
+	assert.Equal(t, 3, channel.ChannelInfo.MultiKeySize)
+	assert.Equal(t, constant.MultiKeyModeRandom, channel.ChannelInfo.MultiKeyMode)
+	assert.Nil(t, channel.Keys)
+}
+
+func TestConvertToMultiKeyRejectsInvalidConversions(t *testing.T) {
+	multiKey := &Channel{
+		Key: "sk-a\nsk-b",
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeySize: 2,
+		},
+	}
+	require.Error(t, multiKey.ConvertToMultiKey([]string{"sk-c"}, constant.MultiKeyModePolling))
+
+	jsonKey := &Channel{Key: `[{"access_token":"x"}]`}
+	require.Error(t, jsonKey.ConvertToMultiKey([]string{"sk-b"}, constant.MultiKeyModePolling))
+
+	// Only the original key survives deduplication: nothing new to convert.
+	single := &Channel{Key: "sk-only"}
+	require.Error(t, single.ConvertToMultiKey([]string{"sk-only", " "}, constant.MultiKeyModePolling))
+}

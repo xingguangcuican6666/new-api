@@ -120,6 +120,47 @@ func MergeTarget(channels []*Channel, name string, mode constant.MultiKeyMode) (
 	return &merged, nil
 }
 
+// ConvertToMultiKey turns a single-key channel into a multi-key channel by
+// appending the given keys after its current key, deduplicated. It rejects
+// channels that are already multi-key and keys in JSON-array format, matching
+// the merge restrictions. The mutation is not persisted; callers save the
+// channel themselves.
+func (channel *Channel) ConvertToMultiKey(extraKeys []string, mode constant.MultiKeyMode) error {
+	if channel.ChannelInfo.IsMultiKey {
+		return errors.New("渠道已是多密钥渠道")
+	}
+	keys := make([]string, 0, len(extraKeys)+1)
+	seen := make(map[string]struct{})
+	for _, key := range append([]string{channel.Key}, extraKeys...) {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if strings.HasPrefix(key, "[") {
+			return errors.New("密钥是 JSON 数组格式，无法转换为多密钥渠道；请先拆分为单密钥渠道")
+		}
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	if len(keys) < 2 {
+		return errors.New("转换后的密钥数量少于 2 个，无需转换为多密钥渠道")
+	}
+	if mode != constant.MultiKeyModeRandom && mode != constant.MultiKeyModePolling {
+		mode = constant.MultiKeyModePolling
+	}
+	channel.Key = strings.Join(keys, "\n")
+	channel.ChannelInfo = ChannelInfo{
+		IsMultiKey:   true,
+		MultiKeySize: len(keys),
+		MultiKeyMode: mode,
+	}
+	channel.Keys = nil
+	return nil
+}
+
 // mergeMismatchLabel compares every field that changes upstream behavior and
 // returns a human-readable label for the first field the two channels differ
 // on, or "" when they are compatible for merging.
