@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -360,14 +361,17 @@ const (
 )
 
 // ImageUpscaleConfig chains a second relay call after every successful
-// non-streaming image relay on this channel: the generated images are submitted
-// to the target channel and model (typically a local upscaler exposed through an
+// image relay on this channel: the generated images are submitted to the
+// target channel and model (typically a local upscaler exposed through an
 // OpenAI Image Edits route) and the processed images replace the response body.
 // The upscale call is billed separately under the target model's pricing.
 type ImageUpscaleConfig struct {
 	Enabled         bool   `json:"enabled"`
 	TargetChannelID int    `json:"target_channel_id"`
 	TargetModel     string `json:"target_model"`
+	// Models optionally restricts the hook to these source model names. Empty
+	// upscales every image request on the channel.
+	Models []string `json:"models,omitempty"`
 	// OnError controls the failure policy. Empty means ImageUpscaleOnErrorFallback.
 	OnError string `json:"on_error,omitempty"`
 	// TimeoutSeconds bounds the per-image upscale relay. Zero uses the default.
@@ -385,6 +389,31 @@ func (c *ImageUpscaleConfig) NormalizedOnError() string {
 
 func (c *ImageUpscaleConfig) NormalizedTargetModel() string {
 	return strings.TrimSpace(c.TargetModel)
+}
+
+// NormalizedModels trims the source model allowlist and drops empty entries.
+// It returns nil when no restriction is configured.
+func (c *ImageUpscaleConfig) NormalizedModels() []string {
+	models := make([]string, 0, len(c.Models))
+	for _, model := range c.Models {
+		if model = strings.TrimSpace(model); model != "" {
+			models = append(models, model)
+		}
+	}
+	if len(models) == 0 {
+		return nil
+	}
+	return models
+}
+
+// MatchesModel reports whether the source model should trigger the hook. An
+// empty allowlist matches every model on the channel.
+func (c *ImageUpscaleConfig) MatchesModel(model string) bool {
+	models := c.NormalizedModels()
+	if models == nil {
+		return true
+	}
+	return slices.Contains(models, strings.TrimSpace(model))
 }
 
 func (c *ImageUpscaleConfig) EffectiveTimeoutSeconds() int {
@@ -413,6 +442,11 @@ func (c *ImageUpscaleConfig) Validate() error {
 	case "", ImageUpscaleOnErrorFallback, ImageUpscaleOnErrorFail:
 	default:
 		return fmt.Errorf("image_upscale.on_error is invalid: %s", c.OnError)
+	}
+	for _, model := range c.NormalizedModels() {
+		if len(model) > maxImageUpscaleModelLength {
+			return fmt.Errorf("image_upscale.models entries must not exceed %d characters", maxImageUpscaleModelLength)
+		}
 	}
 	if c.TimeoutSeconds < 0 || c.TimeoutSeconds > maxImageUpscaleTimeoutSeconds {
 		return fmt.Errorf("image_upscale.timeout_seconds must be between 0 and %d", maxImageUpscaleTimeoutSeconds)

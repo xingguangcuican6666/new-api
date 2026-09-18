@@ -2594,7 +2594,7 @@ export function ChannelMutateDrawer({
                   <FormLabel>{t('Enable image upscale')}</FormLabel>
                   <FormDescription>
                     {t(
-                      'After each successful non-streaming image generation on this channel, submit every generated image to the target channel and model as an image edit and return the processed images to the client.'
+                      'After each successful image generation on this channel, submit every generated image to the target channel and model as an image edit and return the processed images to the client. Streaming responses are replayed after the upscale completes.'
                     )}
                   </FormDescription>
                   <FormMessage />
@@ -2654,6 +2654,28 @@ export function ChannelMutateDrawer({
               <FormDescription>
                 {t(
                   'Model billed for each upscale call. Set its price under model pricing, for example 0 to keep upscaling free.'
+                )}
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='image_upscale.models'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Upscale source models (optional)')}</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder='gpt-image-2.5-flare, gpt-image-2.5-sunburst'
+                  disabled={!imageUpscaleEnabled}
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                {t(
+                  'Only requests for these comma-separated models are upscaled. Leave empty to upscale every image generation on this channel.'
                 )}
               </FormDescription>
               <FormMessage />

@@ -91,6 +91,20 @@ func TestImageUpscaleConfigDefaults(t *testing.T) {
 	assert.Equal(t, 15, config.EffectiveTimeoutSeconds())
 }
 
+func TestImageUpscaleConfigMatchesModel(t *testing.T) {
+	config := &dto.ImageUpscaleConfig{}
+	assert.True(t, config.MatchesModel("gpt-image-2.5-flare"), "empty allowlist matches everything")
+
+	config = &dto.ImageUpscaleConfig{Models: []string{" gpt-image-2.5-flare ", "", "gpt-image-2.5-sunburst"}}
+	assert.True(t, config.MatchesModel("gpt-image-2.5-flare"))
+	assert.True(t, config.MatchesModel("gpt-image-2.5-sunburst"))
+	assert.False(t, config.MatchesModel("gpt-image-2.5-other"))
+	assert.False(t, config.MatchesModel("  "), "blank model names never match")
+
+	config = &dto.ImageUpscaleConfig{Models: []string{"   "}}
+	assert.True(t, config.MatchesModel("gpt-image-2.5-flare"), "blank-only allowlist degenerates to no restriction")
+}
+
 func TestImageUpscaleCaptureTruncation(t *testing.T) {
 	capture := &imageUpscaleCapture{limit: 8}
 	captureCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -302,8 +316,9 @@ func TestArmImageUpscaleHook(t *testing.T) {
 	require.NotNil(t, hook)
 	assert.NotNil(t, hook.writer(c.Writer))
 
+	// Stream requests arm the hook too; the SSE replay happens after capture.
 	streamInfo := newArmTestInfo(enabled, true, false)
-	assert.Nil(t, armImageUpscaleHook(c, streamInfo))
+	assert.NotNil(t, armImageUpscaleHook(c, streamInfo))
 
 	channelTestInfo := newArmTestInfo(enabled, false, true)
 	assert.Nil(t, armImageUpscaleHook(c, channelTestInfo))
@@ -374,4 +389,53 @@ func TestImageUpscaleCaptureAcceptsNormalPayload(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, len(payload), n)
 	assert.False(t, capture.truncated)
+}
+
+func TestSSEPayloadHelpers(t *testing.T) {
+	assert.True(t, isSSEPayload([]byte("event: image_generation.completed\ndata: {}\n\n")))
+	assert.True(t, isSSEPayload([]byte("data: {}\n\n")))
+	assert.False(t, isSSEPayload([]byte(`{"created":1}`)))
+	assert.False(t, isSSEPayload(nil))
+
+	_, ok := sseDataPayload("event: x\ndata: [DONE]")
+	assert.False(t, ok)
+	_, ok = sseDataPayload("event: x\ndata:")
+	assert.False(t, ok)
+	payload, ok := sseDataPayload("event: image_generation.completed\ndata: {\"type\":\"image_generation.completed\"}")
+	require.True(t, ok)
+	assert.Equal(t, `{"type":"image_generation.completed"}`, string(payload))
+
+	assert.True(t, isCompletedImagePayload([]byte(`{"type":"image_generation.completed","b64_json":"abc"}`)))
+	assert.True(t, isCompletedImagePayload([]byte(`{"type":"image_edit.completed","url":"https://x/y.png"}`)))
+	assert.False(t, isCompletedImagePayload([]byte(`{"type":"image_generation.partial_image","b64_json":"abc"}`)))
+	assert.False(t, isCompletedImagePayload([]byte(`{"type":"image_generation.completed"}`)))
+
+	rewritten := rewriteSSEDataLine("event: image_generation.completed\ndata: {\"old\":true}", []byte(`{"new":true}`))
+	assert.Equal(t, "event: image_generation.completed\ndata: {\"new\":true}", rewritten)
+}
+
+func TestImageUpscaleProcessStreamFallsBackWithoutCompletedImage(t *testing.T) {
+	original := "event: image_generation.partial_image\ndata: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"abc\"}\n\n" +
+		"data: [DONE]\n\n"
+	capture := &imageUpscaleCapture{limit: maxImageUpscaleBodyBytes}
+	_, err := capture.body.WriteString(original)
+	require.NoError(t, err)
+	capture.status = http.StatusOK
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+
+	hook := &imageUpscaleHook{
+		config:  &dto.ImageUpscaleConfig{Enabled: true, TargetChannelID: 166, TargetModel: "upscale-nomos-2x"},
+		capture: capture,
+	}
+	info := newArmTestInfo(dto.ChannelOtherSettings{}, false, false)
+	apiErr := hook.process(c, info, &dto.ImageRequest{Prompt: "a cat"})
+	require.Nil(t, apiErr)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, "fallback", recorder.Header().Get(imageUpscaleHeader))
+	assert.Equal(t, original, recorder.Body.String())
+	assert.Empty(t, recorder.Header().Get("Content-Length"), "SSE replay must not carry a Content-Length")
 }

@@ -28,6 +28,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -94,17 +95,21 @@ type imageUpscaleHook struct {
 }
 
 // armImageUpscaleHook returns a hook when the current channel wants image
-// post-processing and the response can actually be replaced: non-streaming,
-// not a channel test, and not already an internal upscale relay.
+// post-processing and the caller is not already an internal upscale relay.
+// Both JSON and SSE responses are handled; the mode is decided after the
+// upstream response has been captured.
 func armImageUpscaleHook(c *gin.Context, info *relaycommon.RelayInfo) *imageUpscaleHook {
 	if c == nil || c.GetBool(imageUpscaleInternalFlag) {
 		return nil
 	}
-	if info == nil || info.IsStream || info.IsChannelTest {
+	if info == nil || info.IsChannelTest {
 		return nil
 	}
 	config := info.ChannelOtherSettings.ImageUpscale
 	if config == nil || !config.Enabled {
+		return nil
+	}
+	if !config.MatchesModel(info.OriginModelName) {
 		return nil
 	}
 	return &imageUpscaleHook{config: config, capture: &imageUpscaleCapture{limit: maxImageUpscaleBodyBytes}}
@@ -124,55 +129,87 @@ type upscaledImageEntry struct {
 	base64Data string
 }
 
+// imageUpscaleSink writes the final client response after post-processing and
+// applies the configured on_error policy on failure.
+type imageUpscaleSink struct {
+	c          *gin.Context
+	realWriter gin.ResponseWriter
+	status     int
+	fallback   []byte
+	policy     string
+}
+
+func (s *imageUpscaleSink) writeFinal(body []byte, headerValue string) {
+	if headerValue != "" {
+		s.realWriter.Header().Set(imageUpscaleHeader, headerValue)
+	}
+	if isSSEPayload(body) {
+		// SSE replies are chunked; a stale Content-Length from the capture
+		// phase would corrupt the replayed stream.
+		s.realWriter.Header().Del("Content-Length")
+	} else {
+		s.realWriter.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	}
+	s.realWriter.WriteHeader(s.status)
+	if _, err := s.realWriter.Write(body); err != nil {
+		logger.LogWarn(s.c, "failed to write image response: "+err.Error())
+	}
+}
+
+// failOrFallback applies the on_error policy. Nothing has been written to the
+// client yet, so the fail policy can still reject the request cleanly (the
+// caller returns the error before any replay); the fallback policy writes the
+// original captured response.
+func (s *imageUpscaleSink) failOrFallback(reason string) *types.NewAPIError {
+	logger.LogWarn(s.c, "image upscale "+reason)
+	if s.policy == dto.ImageUpscaleOnErrorFail {
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("image upscale failed: %s", reason),
+			types.ErrorCodeBadResponse, http.StatusBadGateway, types.ErrOptionWithSkipRetry())
+	}
+	s.writeFinal(s.fallback, "fallback")
+	return nil
+}
+
 // process runs the upscale chain and writes the final response body to the
 // real client writer. Any post-processing failure follows the configured
 // on_error policy: the default fallback returns the original generation
 // untouched, the fail policy errors the request after a successful generation.
 func (h *imageUpscaleHook) process(c *gin.Context, info *relaycommon.RelayInfo, imageReq *dto.ImageRequest) *types.NewAPIError {
-	realWriter := c.Writer
 	status := h.capture.status
 	if status == 0 {
 		status = http.StatusOK
 	}
-
-	writeCaptured := func() {
-		realWriter.Header().Set(imageUpscaleHeader, "fallback")
-		realWriter.Header().Set("Content-Length", strconv.Itoa(h.capture.body.Len()))
-		realWriter.WriteHeader(status)
-		if _, err := realWriter.Write(h.capture.body.Bytes()); err != nil {
-			logger.LogWarn(c, "failed to write buffered image response: "+err.Error())
-		}
-	}
-
-	failOrFallback := func(reason string) *types.NewAPIError {
-		logger.LogWarn(c, "image upscale "+reason)
-		if h.config.NormalizedOnError() == dto.ImageUpscaleOnErrorFail {
-			return types.NewErrorWithStatusCode(
-				fmt.Errorf("image upscale failed: %s", reason),
-				types.ErrorCodeBadResponse, http.StatusBadGateway, types.ErrOptionWithSkipRetry())
-		}
-		writeCaptured()
-		return nil
-	}
-
 	body := h.capture.body.Bytes()
+	sink := &imageUpscaleSink{
+		c:          c,
+		realWriter: c.Writer,
+		status:     status,
+		fallback:   body,
+		policy:     h.config.NormalizedOnError(),
+	}
+
 	if h.capture.truncated || len(body) == 0 {
-		return failOrFallback(fmt.Sprintf("captured response is empty or exceeds %d bytes", maxImageUpscaleBodyBytes))
+		return sink.failOrFallback(fmt.Sprintf("captured response is empty or exceeds %d bytes", maxImageUpscaleBodyBytes))
+	}
+
+	if isSSEPayload(body) {
+		return h.processStream(c, imageReq, body, sink)
 	}
 
 	images, extractErr := extractGeneratedImages(c, body)
 	if extractErr != nil {
-		return failOrFallback("failed to extract generated images: " + extractErr.Error())
+		return sink.failOrFallback("failed to extract generated images: " + extractErr.Error())
 	}
 	if len(images) == 0 {
-		return failOrFallback("generation response contains no image")
+		return sink.failOrFallback("generation response contains no image")
 	}
 
 	upscaled := make([]upscaledImageEntry, 0, len(images))
 	for i, img := range images {
 		entry, upscaleErr := h.upscaleOne(c, imageReq, img)
 		if upscaleErr != nil {
-			return failOrFallback(fmt.Sprintf("image %d/%d via channel #%d model %s failed: %s",
+			return sink.failOrFallback(fmt.Sprintf("image %d/%d via channel #%d model %s failed: %s",
 				i+1, len(images), h.config.TargetChannelID, h.config.NormalizedTargetModel(), upscaleErr.Error()))
 		}
 		upscaled = append(upscaled, entry)
@@ -180,18 +217,133 @@ func (h *imageUpscaleHook) process(c *gin.Context, info *relaycommon.RelayInfo, 
 
 	newBody, buildErr := rebuildImageResponse(body, upscaled)
 	if buildErr != nil {
-		return failOrFallback("failed to rebuild response: " + buildErr.Error())
+		return sink.failOrFallback("failed to rebuild response: " + buildErr.Error())
 	}
 
 	logger.LogInfo(c, fmt.Sprintf("image upscale applied: %d image(s) processed by channel #%d model %s",
 		len(upscaled), h.config.TargetChannelID, h.config.NormalizedTargetModel()))
-	realWriter.Header().Set(imageUpscaleHeader, "applied")
-	realWriter.Header().Set("Content-Length", strconv.Itoa(len(newBody)))
-	realWriter.WriteHeader(status)
-	if _, err := realWriter.Write(newBody); err != nil {
-		logger.LogWarn(c, "failed to write upscaled image response: "+err.Error())
-	}
+	sink.writeFinal(newBody, "applied")
 	return nil
+}
+
+// processStream upscales the images carried by image stream completed events
+// and replays the captured SSE with the final payloads replaced. Everything
+// else — partial previews, usage events, framing — is replayed verbatim.
+func (h *imageUpscaleHook) processStream(c *gin.Context, imageReq *dto.ImageRequest, body []byte, sink *imageUpscaleSink) *types.NewAPIError {
+	segments := strings.Split(string(body), "\n\n")
+	payloads := make(map[int][]byte, 4)
+	imageIndexes := make([]int, 0, 4)
+	for i, segment := range segments {
+		payload, ok := sseDataPayload(segment)
+		if !ok || !isCompletedImagePayload(payload) {
+			continue
+		}
+		payloads[i] = payload
+		imageIndexes = append(imageIndexes, i)
+	}
+	if len(imageIndexes) == 0 {
+		return sink.failOrFallback("stream response contains no completed image event")
+	}
+
+	for n, eventIndex := range imageIndexes {
+		source, extractErr := extractStreamImage(c, payloads[eventIndex])
+		if extractErr != nil {
+			return sink.failOrFallback("failed to extract stream image: " + extractErr.Error())
+		}
+		entry, upscaleErr := h.upscaleOne(c, imageReq, source)
+		if upscaleErr != nil {
+			return sink.failOrFallback(fmt.Sprintf("stream image %d/%d via channel #%d model %s failed: %s",
+				n+1, len(imageIndexes), h.config.TargetChannelID, h.config.NormalizedTargetModel(), upscaleErr.Error()))
+		}
+		newPayload, mutateErr := sjson.SetBytes(payloads[eventIndex], "b64_json", entry.base64Data)
+		if mutateErr == nil {
+			newPayload, mutateErr = sjson.DeleteBytes(newPayload, "url")
+		}
+		if mutateErr != nil {
+			return sink.failOrFallback("failed to rebuild stream event: " + mutateErr.Error())
+		}
+		payloads[eventIndex] = newPayload
+	}
+
+	replayed := &bytes.Buffer{}
+	replayed.Grow(len(body))
+	for i, segment := range segments {
+		if payload, ok := payloads[i]; ok {
+			segment = rewriteSSEDataLine(segment, payload)
+		}
+		replayed.WriteString(segment)
+		replayed.WriteString("\n\n")
+	}
+
+	logger.LogInfo(c, fmt.Sprintf("image upscale applied (stream): %d image(s) processed by channel #%d model %s",
+		len(imageIndexes), h.config.TargetChannelID, h.config.NormalizedTargetModel()))
+	sink.writeFinal(replayed.Bytes(), "applied")
+	return nil
+}
+
+// isSSEPayload reports whether the captured body is a server-sent events
+// stream rather than a plain JSON document.
+func isSSEPayload(body []byte) bool {
+	trimmed := bytes.TrimLeft(body, " \t\r\n")
+	return bytes.HasPrefix(trimmed, []byte("event:")) || bytes.HasPrefix(trimmed, []byte("data:"))
+}
+
+// sseDataPayload returns the JSON payload of an event's single data line.
+func sseDataPayload(segment string) ([]byte, bool) {
+	for _, line := range strings.Split(segment, "\n") {
+		payload, found := strings.CutPrefix(line, "data:")
+		if !found {
+			continue
+		}
+		payload = strings.TrimSpace(payload)
+		if payload == "" || payload == "[DONE]" {
+			return nil, false
+		}
+		return []byte(payload), true
+	}
+	return nil, false
+}
+
+// isCompletedImagePayload recognizes image stream events that carry a final
+// image (image_generation.completed / image_edit.completed and variants).
+func isCompletedImagePayload(payload []byte) bool {
+	eventType := gjson.GetBytes(payload, "type").String()
+	if !strings.HasSuffix(eventType, ".completed") {
+		return false
+	}
+	return gjson.GetBytes(payload, "b64_json").Exists() || gjson.GetBytes(payload, "url").Exists()
+}
+
+// extractStreamImage converts one completed stream event payload into the
+// source image bytes for the upscale relay.
+func extractStreamImage(c *gin.Context, payload []byte) (upscaleSourceImage, error) {
+	if b64 := gjson.GetBytes(payload, "b64_json"); b64.Exists() && b64.Type == gjson.String {
+		decoded, err := decodeImageBase64(b64.String())
+		if err != nil {
+			return upscaleSourceImage{}, fmt.Errorf("failed to decode stream b64_json: %w", err)
+		}
+		return newUpscaleSourceImage(decoded), nil
+	}
+	if urlValue := gjson.GetBytes(payload, "url"); urlValue.Exists() && urlValue.Type == gjson.String {
+		downloaded, err := downloadUpscaleSourceImage(c, urlValue.String())
+		if err != nil {
+			return upscaleSourceImage{}, fmt.Errorf("failed to download stream url: %w", err)
+		}
+		return newUpscaleSourceImage(downloaded), nil
+	}
+	return upscaleSourceImage{}, errors.New("stream event has neither b64_json nor url")
+}
+
+// rewriteSSEDataLine replaces the data line of one captured SSE event.
+func rewriteSSEDataLine(segment string, payload []byte) string {
+	lines := strings.Split(segment, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "data:") {
+			lines[i] = "data: " + string(payload)
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // upscaleOne relays one generated image through the configured target channel

@@ -237,6 +237,8 @@ const imageUpscaleSchema = z.object({
   enabled: z.boolean().optional(),
   target_channel_id: z.number().int().optional(),
   target_model: z.string().optional(),
+  // Comma-separated source model allowlist; stored as an array in settings JSON.
+  models: z.string().optional(),
   on_error: z
     .enum(['', IMAGE_UPSCALE_ON_ERROR_FALLBACK, IMAGE_UPSCALE_ON_ERROR_FAIL])
     .optional(),
@@ -776,6 +778,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
     enabled: false,
     target_channel_id: 0,
     target_model: '',
+    models: '',
     on_error: IMAGE_UPSCALE_ON_ERROR_FALLBACK,
     timeout_seconds: IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS,
   },
@@ -877,6 +880,7 @@ const DEFAULT_IMAGE_UPSCALE_FORM_VALUES: ImageUpscaleFormValues = {
   enabled: false,
   target_channel_id: 0,
   target_model: '',
+  models: '',
   on_error: IMAGE_UPSCALE_ON_ERROR_FALLBACK,
   timeout_seconds: IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS,
 }
@@ -900,11 +904,15 @@ function normalizeImageUpscaleFormValues(value: unknown): ImageUpscaleFormValues
     Number.isFinite(value.timeout_seconds)
       ? Math.trunc(value.timeout_seconds)
       : IMAGE_UPSCALE_DEFAULT_TIMEOUT_SECONDS
+  const models = Array.isArray(value.models)
+    ? value.models.filter((model): model is string => typeof model === 'string')
+    : []
 
   return {
     enabled: value.enabled === true,
     target_channel_id: targetChannelId,
     target_model: typeof value.target_model === 'string' ? value.target_model : '',
+    models: models.join(','),
     on_error: onError,
     timeout_seconds: timeoutSeconds,
   }
@@ -1335,6 +1343,14 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
           ? Math.trunc(upscale.target_channel_id)
           : 0,
       target_model: upscale.target_model?.trim() || '',
+      models: [
+        ...new Set(
+          String(upscale.models || '')
+            .split(',')
+            .map((model) => model.trim())
+            .filter(Boolean)
+        ),
+      ],
       on_error:
         upscale.on_error === IMAGE_UPSCALE_ON_ERROR_FAIL
           ? IMAGE_UPSCALE_ON_ERROR_FAIL
