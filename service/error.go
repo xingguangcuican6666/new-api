@@ -88,9 +88,11 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 
 const sanitizedUpstreamErrorMessage = "upstream request failed; contact the service administrator with the request ID"
 
-// sanitizeUpstreamError replaces upstream error text for regular users. The
-// requester's own administrators and root keep the verbatim upstream error so
-// they can diagnose channel problems directly from the API response.
+// sanitizeUpstreamError pins the sanitized text for client-facing projections
+// only. Err and RelayError keep the verbatim upstream error, so channel
+// auto-disable keyword matching, retry classification, and error logs all
+// operate on the real error. The requester's own administrators and root get
+// the verbatim upstream error in the API response as well.
 func sanitizeUpstreamError(c *gin.Context, newApiErr *types.NewAPIError, responseBodyPreview string) {
 	if !setting.SanitizeUpstreamErrorEnabled || newApiErr == nil || newApiErr.Err == nil {
 		return
@@ -98,8 +100,12 @@ func sanitizeUpstreamError(c *gin.Context, newApiErr *types.NewAPIError, respons
 	if c != nil && c.GetInt("role") >= common.RoleAdminUser {
 		return
 	}
-	logger.LogError(c, fmt.Sprintf("sanitized upstream error: %s, body: %s", newApiErr.Err.Error(), responseBodyPreview))
-	newApiErr.Err = errors.New(sanitizedUpstreamErrorMessage)
+	logger.LogError(c, fmt.Sprintf("upstream error sanitized for client: %s, body: %s", newApiErr.Err.Error(), responseBodyPreview))
+	clientMessage := sanitizedUpstreamErrorMessage
+	if requestId := c.GetString(common.RequestIdKey); requestId != "" {
+		clientMessage = common.MessageWithRequestId(clientMessage, requestId)
+	}
+	newApiErr.SetClientMessage(clientMessage)
 }
 
 func RelayErrorHandler(c *gin.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {

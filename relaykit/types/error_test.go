@@ -60,3 +60,26 @@ func TestIsStreamStallError(t *testing.T) {
 		errors.New("upstream stream stalled before first byte"),
 		ErrorCodeChannelStreamTimeout, http.StatusBadGateway)))
 }
+
+func TestClientMessageOverridesClientProjectionsOnly(t *testing.T) {
+	err := WithOpenAIError(OpenAIError{
+		Message: "upstream acct-secret balance exhausted",
+		Type:    "insufficient_quota",
+		Code:    "insufficient_quota",
+	}, http.StatusPaymentRequired)
+
+	// Without a client message the projections carry the verbatim error.
+	assert.Contains(t, err.ToOpenAIError().Message, "acct-secret")
+	assert.Contains(t, err.ToClaudeError().Message, "acct-secret")
+
+	err.SetClientMessage("upstream request failed")
+	assert.Equal(t, "upstream request failed", err.ToOpenAIError().Message)
+	assert.Equal(t, "upstream request failed", err.ToClaudeError().Message)
+	// Internal consumers keep reading the verbatim error.
+	assert.Contains(t, err.Error(), "acct-secret")
+	assert.Contains(t, err.Err.Error(), "acct-secret")
+
+	// Deep-preserved NewAPIError keeps its pinned client message.
+	wrapped := NewError(err, ErrorCodeBadResponse)
+	assert.Equal(t, "upstream request failed", wrapped.ToOpenAIError().Message)
+}

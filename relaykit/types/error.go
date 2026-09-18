@@ -103,6 +103,11 @@ type NewAPIError struct {
 	errorCode      ErrorCode
 	StatusCode     int
 	Metadata       json.RawMessage
+	// clientMessage, when set, replaces the error text in client-facing
+	// projections (ToOpenAIError / ToClaudeError). Internal consumers — channel
+	// auto-disable keyword matching, retry classification, error logs — keep
+	// reading the verbatim Err so they always see the real upstream error.
+	clientMessage string
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.
@@ -184,6 +189,22 @@ func (e *NewAPIError) SetMessage(message string) {
 	e.Err = errors.New(message)
 }
 
+// SetClientMessage pins the text returned by client-facing projections without
+// touching Err, so internal consumers keep seeing the verbatim error.
+func (e *NewAPIError) SetClientMessage(message string) {
+	if e == nil {
+		return
+	}
+	e.clientMessage = message
+}
+
+func (e *NewAPIError) GetClientMessage() string {
+	if e == nil {
+		return ""
+	}
+	return e.clientMessage
+}
+
 func (e *NewAPIError) ToOpenAIError() OpenAIError {
 	var result OpenAIError
 	switch e.errorType {
@@ -210,6 +231,9 @@ func (e *NewAPIError) ToOpenAIError() OpenAIError {
 	}
 	if e.errorCode != ErrorCodeCountTokenFailed {
 		result.Message = kitutil.MaskSensitiveInfo(result.Message)
+	}
+	if e.clientMessage != "" {
+		result.Message = e.clientMessage
 	}
 	if result.Message == "" {
 		result.Message = string(e.errorType)
@@ -239,6 +263,9 @@ func (e *NewAPIError) ToClaudeError() ClaudeError {
 	}
 	if e.errorCode != ErrorCodeCountTokenFailed {
 		result.Message = kitutil.MaskSensitiveInfo(result.Message)
+	}
+	if e.clientMessage != "" {
+		result.Message = e.clientMessage
 	}
 	if result.Message == "" {
 		result.Message = string(e.errorType)

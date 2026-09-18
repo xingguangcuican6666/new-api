@@ -8,12 +8,15 @@ import "github.com/QuantumNous/new-api/common"
 // figures, internal hostnames and URLs, request IDs of another system, and
 // sometimes fragments of the prompt — reaches whoever called the API.
 //
-// While enabled, a relay error whose text came from upstream is replaced by a
-// fixed sentence that keeps the request ID. What is preserved: the HTTP status
-// code, the protocol error type, and the error code, so clients can still
-// branch on `insufficient_quota`, `rate_limit_exceeded`, `content_policy_
-// violation` and friends. Operators lose nothing: the real upstream text stays
-// in the server log and in the admin-only part of the error log.
+// While enabled, the text served to non-admin API callers is replaced by a
+// fixed sentence. What is preserved in the response: the HTTP status code, the
+// protocol error type, and the error code, so clients can still branch on
+// `insufficient_quota`, `rate_limit_exceeded`, `content_policy_violation` and
+// friends. Internally the verbatim upstream error is kept everywhere it
+// matters: channel auto-disable keyword/status-code matching, retry
+// classification, and the error logs all compare against the real error, and
+// administrators and root also receive the verbatim error in their own API
+// responses.
 //
 // Errors this service authored itself (invalid request, insufficient quota of
 // our own wallet, channel selection failures, rate limiting) keep their

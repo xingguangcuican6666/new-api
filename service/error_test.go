@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
@@ -172,13 +173,34 @@ func TestRelayErrorHandlerSanitizesStructuredError(t *testing.T) {
 	setting.SanitizeUpstreamErrorEnabled = true
 	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
 
+	upstreamMessage := "account acct-secret has balance 0"
 	resp := &http.Response{
 		StatusCode: http.StatusTooManyRequests,
-		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"account acct-secret has balance 0","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"` + upstreamMessage + `","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
 	}
 	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
-	require.Equal(t, sanitizedUpstreamErrorMessage, newAPIError.Err.Error())
+
+	// The client projection carries the fixed sentence; the internal error
+	// keeps the verbatim upstream text for keyword matching and error logs.
+	require.Equal(t, sanitizedUpstreamErrorMessage, newAPIError.ToOpenAIError().Message)
+	require.Contains(t, newAPIError.Err.Error(), upstreamMessage)
 	require.Equal(t, http.StatusTooManyRequests, newAPIError.StatusCode)
+}
+
+func TestRelayErrorHandlerSanitizesClaudeProjection(t *testing.T) {
+	original := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = true
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
+
+	resp := &http.Response{
+		StatusCode: http.StatusTooManyRequests,
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"internal host upstream-a.example.com quota exhausted","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
+	}
+	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
+
+	claudeError := newAPIError.ToClaudeError()
+	require.Equal(t, sanitizedUpstreamErrorMessage, claudeError.Message)
+	require.Contains(t, newAPIError.Err.Error(), "upstream-a.example.com")
 }
 
 func TestRelayErrorHandlerKeepsVerbatimErrorForAdminAndRoot(t *testing.T) {
@@ -199,9 +221,37 @@ func TestRelayErrorHandlerKeepsVerbatimErrorForAdminAndRoot(t *testing.T) {
 			c := newErrorTestContext(t)
 			c.Set("role", role)
 			newAPIError := RelayErrorHandler(c, resp, false)
-			require.Contains(t, newAPIError.Err.Error(), upstreamMessage)
+			require.Contains(t, newAPIError.ToOpenAIError().Message, upstreamMessage)
+			require.Empty(t, newAPIError.GetClientMessage())
 		})
 	}
+}
+
+func TestShouldRuntimeDisableMatchesVerbatimUpstreamKeywordWhileSanitized(t *testing.T) {
+	original := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = true
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
+	originalRuntimeDisable := common.RuntimeAutomaticDisableChannelEnabled
+	common.RuntimeAutomaticDisableChannelEnabled = true
+	t.Cleanup(func() { common.RuntimeAutomaticDisableChannelEnabled = originalRuntimeDisable })
+
+	resp := &http.Response{
+		StatusCode: http.StatusTooManyRequests,
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"account acct-secret has balance 0","type":"insufficient_quota","code":"insufficient_quota"}}`)),
+	}
+	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
+	require.Equal(t, sanitizedUpstreamErrorMessage, newAPIError.ToOpenAIError().Message)
+
+	// The auto-disable keyword rule must compare against the verbatim upstream
+	// error, not the sanitized client text.
+	settings := &dto.ChannelOtherSettings{
+		RuntimeAutomaticDisableOverrideEnabled: true,
+		RuntimeAutomaticDisableKeywords:        "balance 0",
+	}
+	require.True(t, ShouldRuntimeDisableChannel(newAPIError, settings))
+
+	settings.RuntimeAutomaticDisableKeywords = "no-match-keyword"
+	require.False(t, ShouldRuntimeDisableChannel(newAPIError, settings))
 }
 
 func TestRelayErrorHandlerKeepsStructuredErrorWhenSanitizerDisabled(t *testing.T) {
