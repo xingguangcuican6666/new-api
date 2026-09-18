@@ -100,3 +100,91 @@ func TestSaveStatusStateFromSingleKeySnapshotPreservesUnownedColumns(t *testing.
 	assert.Equal(t, "manual operation", otherInfo["status_reason"])
 	assert.Equal(t, float64(1234), otherInfo["status_time"])
 }
+
+func TestGetChannelSkipsDisabledChannelDespiteStaleAbility(t *testing.T) {
+	setupChannelStatusTest(t)
+
+	channel := Channel{
+		Name:   "zombie-channel",
+		Key:    "key",
+		Status: common.ChannelStatusManuallyDisabled,
+		Models: "stale-model",
+		Group:  "default",
+	}
+	require.NoError(t, DB.Create(&channel).Error)
+	// Simulate the historical inconsistency: the abilities row stayed enabled
+	// while the channel itself is disabled.
+	staleAbility := Ability{
+		Group:     "default",
+		Model:     "stale-model",
+		ChannelId: channel.Id,
+		Enabled:   true,
+		Priority:  common.GetPointer[int64](0),
+		Weight:    10,
+	}
+	require.NoError(t, DB.Create(&staleAbility).Error)
+
+	selected, err := GetChannel([]string{"default"}, "stale-model", 0, nil)
+	require.NoError(t, err)
+	assert.Nil(t, selected, "a disabled channel must not be selected even with a stale enabled ability row")
+
+	// A healthy enabled channel with the same model stays selectable.
+	healthy := Channel{
+		Name:   "healthy-channel",
+		Key:    "key",
+		Status: common.ChannelStatusEnabled,
+		Models: "stale-model",
+		Group:  "default",
+	}
+	require.NoError(t, DB.Create(&healthy).Error)
+	require.NoError(t, DB.Create(&Ability{
+		Group:     "default",
+		Model:     "stale-model",
+		ChannelId: healthy.Id,
+		Enabled:   true,
+		Priority:  common.GetPointer[int64](0),
+		Weight:    10,
+	}).Error)
+
+	selected, err = GetChannel([]string{"default"}, "stale-model", 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, selected)
+	assert.Equal(t, healthy.Id, selected.Id)
+}
+
+func TestUpdateChannelStatusRepairsStaleAbilitiesOnIdempotentDisable(t *testing.T) {
+	setupChannelStatusTest(t)
+
+	channel := Channel{
+		Name:   "repair-channel",
+		Key:    "key",
+		Status: common.ChannelStatusEnabled,
+		Models: "repair-model",
+		Group:  "default",
+	}
+	require.NoError(t, DB.Create(&channel).Error)
+	ability := Ability{
+		Group:     "default",
+		Model:     "repair-model",
+		ChannelId: channel.Id,
+		Enabled:   true,
+		Priority:  common.GetPointer[int64](0),
+		Weight:    10,
+	}
+	require.NoError(t, DB.Create(&ability).Error)
+
+	require.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "provider rejected"))
+
+	// Simulate a lost ability update so the row goes stale while the channel
+	// is already disabled.
+	require.NoError(t, DB.Model(&Ability{}).Where("channel_id = ?", channel.Id).Update("enabled", true).Error)
+
+	// The repeated idempotent disable must repair the stale row instead of
+	// returning early, otherwise the channel stays schedulable forever.
+	changed := UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "provider rejected")
+	require.False(t, changed)
+
+	var stored Ability
+	require.NoError(t, DB.Where("channel_id = ?", channel.Id).First(&stored).Error)
+	assert.False(t, stored.Enabled)
+}

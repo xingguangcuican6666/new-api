@@ -113,7 +113,17 @@ func GetChannel(
 	filters []dto.ChannelFilter,
 ) (*Channel, error) {
 	var abilities []Ability
-	err := DB.Where(commonGroupCol+" IN ? and model = ? and enabled = ?", groups, model, true).Order("priority DESC, weight DESC").Find(&abilities).Error
+	// Join the channels table so a stale abilities row (enabled=true on a
+	// channel whose status is disabled) cannot keep a disabled channel
+	// schedulable: with the memory cache off this DB path is the only
+	// selector, and abilities.enabled alone has no self-healing guarantee.
+	err := DB.Model(&Ability{}).
+		Select("abilities.*").
+		Joins("JOIN channels ON channels.id = abilities.channel_id").
+		Where("abilities."+commonGroupCol+" IN ? AND abilities.model = ? AND abilities.enabled = ? AND channels.status = ?",
+			groups, model, true, common.ChannelStatusEnabled).
+		Order("abilities.priority DESC, abilities.weight DESC").
+		Find(&abilities).Error
 	if err != nil {
 		return nil, err
 	}

@@ -791,6 +791,15 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 			status == common.ChannelStatusManuallyDisabled && reason != ChannelStatusReasonAllKeysDisabled &&
 			channel.GetOtherInfo()["status_reason"] == ChannelStatusReasonAllKeysDisabled
 		if channel.Status == status && !overridesKeyExhaustion {
+			// Idempotent status call. Reconcile the abilities table anyway when
+			// the requested status disables the channel: the non-cache selection
+			// path trusts abilities.enabled alone, so one stale enabled row
+			// keeps a disabled channel schedulable forever.
+			if status != common.ChannelStatusEnabled {
+				if err := UpdateAbilityStatus(channelId, false); err != nil {
+					common.SysLog(fmt.Sprintf("failed to reconcile disabled channel abilities: channel_id=%d, error=%v", channelId, err))
+				}
+			}
 			return false
 		}
 
