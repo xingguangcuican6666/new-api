@@ -2,10 +2,10 @@ package service
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -85,7 +85,7 @@ func TestRelayErrorHandlerTruncatesInvalidJSONBodyInLog(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 
-	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
 
 	require.NotNil(t, newAPIError)
 	require.Equal(t, "bad response status code 500", newAPIError.Error())
@@ -102,7 +102,7 @@ func TestRelayErrorHandlerKeepsStructuredErrorMessage(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 
-	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
 
 	require.NotNil(t, newAPIError)
 	require.Equal(t, message, newAPIError.Error())
@@ -116,7 +116,7 @@ func TestRelayErrorHandlerKeepsOpenAIErrorMessage(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 
-	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
 
 	require.NotNil(t, newAPIError)
 	require.Equal(t, message, newAPIError.Error())
@@ -143,7 +143,7 @@ func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 
-	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
 
 	require.NotNil(t, newAPIError)
 	require.NotContains(t, logBuffer.String(), "[truncated")
@@ -160,6 +160,13 @@ func withDebugEnabled(t *testing.T, enabled bool) {
 	})
 }
 
+func newErrorTestContext(t *testing.T) *gin.Context {
+	t.Helper()
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	return c
+}
+
 func TestRelayErrorHandlerSanitizesStructuredError(t *testing.T) {
 	original := setting.SanitizeUpstreamErrorEnabled
 	setting.SanitizeUpstreamErrorEnabled = true
@@ -169,9 +176,32 @@ func TestRelayErrorHandlerSanitizesStructuredError(t *testing.T) {
 		StatusCode: http.StatusTooManyRequests,
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"account acct-secret has balance 0","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
 	}
-	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
 	require.Equal(t, sanitizedUpstreamErrorMessage, newAPIError.Err.Error())
 	require.Equal(t, http.StatusTooManyRequests, newAPIError.StatusCode)
+}
+
+func TestRelayErrorHandlerKeepsVerbatimErrorForAdminAndRoot(t *testing.T) {
+	original := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = true
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
+
+	upstreamMessage := "account acct-secret has balance 0"
+	for name, role := range map[string]int{
+		"admin": common.RoleAdminUser,
+		"root":  common.RoleRootUser,
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp := &http.Response{
+				StatusCode: http.StatusTooManyRequests,
+				Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"` + upstreamMessage + `","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
+			}
+			c := newErrorTestContext(t)
+			c.Set("role", role)
+			newAPIError := RelayErrorHandler(c, resp, false)
+			require.Contains(t, newAPIError.Err.Error(), upstreamMessage)
+		})
+	}
 }
 
 func TestRelayErrorHandlerKeepsStructuredErrorWhenSanitizerDisabled(t *testing.T) {
@@ -183,6 +213,6 @@ func TestRelayErrorHandlerKeepsStructuredErrorWhenSanitizerDisabled(t *testing.T
 		StatusCode: http.StatusBadRequest,
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"actionable upstream detail","type":"invalid_request_error","code":"invalid_request"}}`)),
 	}
-	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
 	require.Contains(t, newAPIError.Err.Error(), "actionable upstream detail")
 }

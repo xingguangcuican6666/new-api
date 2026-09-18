@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +16,8 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting"
+
+	"github.com/gin-gonic/gin"
 )
 
 func MidjourneyErrorWrapper(code int, desc string) *taskdto.MidjourneyResponse {
@@ -87,15 +88,21 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 
 const sanitizedUpstreamErrorMessage = "upstream request failed; contact the service administrator with the request ID"
 
-func sanitizeUpstreamError(ctx context.Context, newApiErr *types.NewAPIError, responseBodyPreview string) {
+// sanitizeUpstreamError replaces upstream error text for regular users. The
+// requester's own administrators and root keep the verbatim upstream error so
+// they can diagnose channel problems directly from the API response.
+func sanitizeUpstreamError(c *gin.Context, newApiErr *types.NewAPIError, responseBodyPreview string) {
 	if !setting.SanitizeUpstreamErrorEnabled || newApiErr == nil || newApiErr.Err == nil {
 		return
 	}
-	logger.LogError(ctx, fmt.Sprintf("sanitized upstream error: %s, body: %s", newApiErr.Err.Error(), responseBodyPreview))
+	if c != nil && c.GetInt("role") >= common.RoleAdminUser {
+		return
+	}
+	logger.LogError(c, fmt.Sprintf("sanitized upstream error: %s, body: %s", newApiErr.Err.Error(), responseBodyPreview))
 	newApiErr.Err = errors.New(sanitizedUpstreamErrorMessage)
 }
 
-func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
+func RelayErrorHandler(c *gin.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
 	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 
 	responseBody, err := io.ReadAll(resp.Body)
@@ -118,7 +125,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 		if showBodyWhenFail {
 			newApiErr.Err = buildErrWithBody("")
 		} else {
-			logger.LogError(ctx, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, responseBodyPreview))
+			logger.LogError(c, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, responseBodyPreview))
 			newApiErr.Err = fmt.Errorf("bad response status code %d", resp.StatusCode)
 		}
 		return
@@ -132,7 +139,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 			if showBodyWhenFail {
 				newApiErr.Err = buildErrWithBody(newApiErr.Error())
 			}
-			sanitizeUpstreamError(ctx, newApiErr, responseBodyPreview)
+			sanitizeUpstreamError(c, newApiErr, responseBodyPreview)
 			return
 		}
 	}
@@ -140,13 +147,13 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 	if message == "" {
 		// The body parsed as JSON but carried no usable error message; log the
 		// raw body so the upstream failure remains diagnosable.
-		logger.LogError(ctx, fmt.Sprintf("bad response status code %d with empty error message, body: %s", resp.StatusCode, responseBodyPreview))
+		logger.LogError(c, fmt.Sprintf("bad response status code %d with empty error message, body: %s", resp.StatusCode, responseBodyPreview))
 	}
 	newApiErr = types.NewOpenAIError(errors.New(message), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 	if showBodyWhenFail {
 		newApiErr.Err = buildErrWithBody(newApiErr.Error())
 	}
-	sanitizeUpstreamError(ctx, newApiErr, responseBodyPreview)
+	sanitizeUpstreamError(c, newApiErr, responseBodyPreview)
 	return
 }
 
