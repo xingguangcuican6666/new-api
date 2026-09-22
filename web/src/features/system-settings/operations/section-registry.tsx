@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { DataCaptureSection } from '../general/data-capture-section'
 import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
@@ -102,6 +103,22 @@ const OPERATIONS_SECTIONS = [
     build: (settings: OperationsSettings) => (
       <LogSettingsSection
         defaultEnabled={Boolean(settings.LogConsumeEnabled)}
+      />
+    ),
+  },
+  {
+    id: 'data-capture',
+    titleKey: 'Conversation Data Capture',
+    build: (settings: OperationsSettings) => (
+      <DataCaptureSection
+        defaultValues={{
+          'data_capture_setting.enabled':
+            settings['data_capture_setting.enabled'] ?? false,
+          'data_capture_setting.max_body_kb':
+            settings['data_capture_setting.max_body_kb'] ?? 512,
+          'data_capture_setting.dir':
+            settings['data_capture_setting.dir'] ?? '',
+        }}
       />
     ),
   },
