@@ -91,23 +91,30 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter := relayV1Router.Group("")
 		httpRouter.Use(middleware.Distribute())
 
+		// chatRouter groups conversation-style endpoints (messages / completions /
+		// chat completions / responses compaction). DataCapture optionally saves
+		// their request and response bodies as JSONL for offline training data;
+		// it is a no-op unless the data capture toggle is enabled.
+		chatRouter := httpRouter.Group("")
+		chatRouter.Use(middleware.DataCapture())
+
 		// claude related routes
 		// TODO: /messages/count_tokens is disabled. The current controller.CountClaudeTokens
 		// httpRouter.POST("/messages/count_tokens", controller.CountClaudeTokens)
-		httpRouter.POST("/messages", func(c *gin.Context) {
+		chatRouter.POST("/messages", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatClaude)
 		})
 
 		// chat related routes
-		httpRouter.POST("/completions", func(c *gin.Context) {
+		chatRouter.POST("/completions", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAI)
 		})
-		httpRouter.POST("/chat/completions", func(c *gin.Context) {
+		chatRouter.POST("/chat/completions", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAI)
 		})
 
 		// response related routes
-		httpRouter.POST("/responses/compact", func(c *gin.Context) {
+		chatRouter.POST("/responses/compact", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIResponsesCompaction)
 		})
 
