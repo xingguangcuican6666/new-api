@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting"
@@ -178,11 +179,15 @@ func TestRelayErrorHandlerSanitizesStructuredError(t *testing.T) {
 		StatusCode: http.StatusTooManyRequests,
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"` + upstreamMessage + `","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
 	}
-	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
+	c := newErrorTestContext(t)
+	newAPIError := RelayErrorHandler(c, resp, false)
+	// Standardization is applied once at the relay exit (controller.Relay defer),
+	// not inside RelayErrorHandler; replicate that exit step here.
+	StandardizeUpstreamError(c, newAPIError)
 
 	// The client projection carries the fixed sentence; the internal error
 	// keeps the verbatim upstream text for keyword matching and error logs.
-	require.Equal(t, sanitizedUpstreamErrorMessage, newAPIError.ToOpenAIError().Message)
+	require.Equal(t, StandardUpstreamMessage(c, http.StatusTooManyRequests), newAPIError.ToOpenAIError().Message)
 	require.Contains(t, newAPIError.Err.Error(), upstreamMessage)
 	require.Equal(t, http.StatusTooManyRequests, newAPIError.StatusCode)
 }
@@ -196,10 +201,12 @@ func TestRelayErrorHandlerSanitizesClaudeProjection(t *testing.T) {
 		StatusCode: http.StatusTooManyRequests,
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"internal host upstream-a.example.com quota exhausted","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
 	}
-	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
+	c := newErrorTestContext(t)
+	newAPIError := RelayErrorHandler(c, resp, false)
+	StandardizeUpstreamError(c, newAPIError)
 
 	claudeError := newAPIError.ToClaudeError()
-	require.Equal(t, sanitizedUpstreamErrorMessage, claudeError.Message)
+	require.Equal(t, StandardUpstreamMessage(c, http.StatusTooManyRequests), claudeError.Message)
 	require.Contains(t, newAPIError.Err.Error(), "upstream-a.example.com")
 }
 
@@ -214,13 +221,26 @@ func TestRelayErrorHandlerKeepsVerbatimErrorForAdminAndRoot(t *testing.T) {
 		"root":  common.RoleRootUser,
 	} {
 		t.Run(name, func(t *testing.T) {
+			// Privileged callers keep seeing the verbatim upstream error, so admin
+			// detection must run through the real model.IsAdmin lookup keyed by the
+			// context user id rather than a bare role flag.
+			user := &model.User{
+				Username: "sanitize-verbatim-" + name,
+				Role:     role,
+				Status:   common.UserStatusEnabled,
+				AffCode:  "sanitize-verbatim-" + name,
+			}
+			require.NoError(t, model.DB.Create(user).Error)
+			t.Cleanup(func() { model.DB.Unscoped().Delete(user) })
+
 			resp := &http.Response{
 				StatusCode: http.StatusTooManyRequests,
 				Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"` + upstreamMessage + `","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)),
 			}
 			c := newErrorTestContext(t)
-			c.Set("role", role)
+			c.Set("id", user.Id)
 			newAPIError := RelayErrorHandler(c, resp, false)
+			StandardizeUpstreamError(c, newAPIError)
 			require.Contains(t, newAPIError.ToOpenAIError().Message, upstreamMessage)
 			require.Empty(t, newAPIError.GetClientMessage())
 		})
@@ -239,8 +259,10 @@ func TestShouldRuntimeDisableMatchesVerbatimUpstreamKeywordWhileSanitized(t *tes
 		StatusCode: http.StatusTooManyRequests,
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"account acct-secret has balance 0","type":"insufficient_quota","code":"insufficient_quota"}}`)),
 	}
-	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
-	require.Equal(t, sanitizedUpstreamErrorMessage, newAPIError.ToOpenAIError().Message)
+	c := newErrorTestContext(t)
+	newAPIError := RelayErrorHandler(c, resp, false)
+	StandardizeUpstreamError(c, newAPIError)
+	require.Equal(t, StandardUpstreamMessage(c, http.StatusTooManyRequests), newAPIError.ToOpenAIError().Message)
 
 	// The auto-disable keyword rule must compare against the verbatim upstream
 	// error, not the sanitized client text.

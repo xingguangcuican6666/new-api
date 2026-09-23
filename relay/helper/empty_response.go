@@ -116,12 +116,47 @@ func (g *EmptyResponseGuard) Commit(usage *dto.Usage) *types.NewAPIError {
 }
 
 // isEmptyUpstreamResponse reports whether the response the gateway is about to
-// forward carries no model output at all. Both signals must agree: the reported
-// or counted output tokens are zero, and the payload holds no visible content.
-// Requiring both keeps a channel that under-reports usage, or a payload shape
-// the content walk does not recognise, from losing a real answer.
+// forward carries no model output at all. All signals must agree: the reported
+// or counted output tokens are zero, the payload holds no visible content, and
+// the payload carries no definitive Responses outcome. Requiring all of them
+// keeps a channel that under-reports usage, a payload shape the content walk does
+// not recognise, or an explicit failure the upstream already reported, from
+// being discarded as if the upstream had answered with nothing.
 func isEmptyUpstreamResponse(body []byte, usage *dto.Usage) bool {
-	return !hasOutputTokens(usage) && !payloadHasVisibleContent(body)
+	return !hasOutputTokens(usage) && !payloadHasVisibleContent(body) && !payloadReportsDefinitiveOutcome(body)
+}
+
+// responsesOutcomeTypes are the Responses API stream events (and the bare error
+// frame) that report a definitive server-side outcome: the request completed,
+// failed, or ended incomplete, or the upstream raised an error. Their presence
+// means the upstream gave its final word — which the client must see and billing
+// must settle as that outcome — rather than the silent empty 200 this guard
+// exists to retry. A failed or zero-output completion is still an answer, and a
+// business error such as context_length_exceeded must never be retried.
+var responsesOutcomeTypes = map[string]struct{}{
+	"response.completed":  {},
+	"response.failed":     {},
+	"response.incomplete": {},
+	"error":               {},
+}
+
+// payloadReportsDefinitiveOutcome reports whether the buffered payload carries a
+// Responses API terminal or error frame. These frames are protocol-specific
+// enough (top-level "type") that the chat, Claude and Gemini empty shapes the
+// guard still retries never match them.
+func payloadReportsDefinitiveOutcome(body []byte) bool {
+	for _, payload := range jsonPayloads(body) {
+		var frame struct {
+			Type string `json:"type"`
+		}
+		if err := common.Unmarshal(payload, &frame); err != nil {
+			continue
+		}
+		if _, ok := responsesOutcomeTypes[frame.Type]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func hasOutputTokens(usage *dto.Usage) bool {
@@ -156,6 +191,10 @@ var contentBearingKeys = map[string]struct{}{
 	"partial_json":      {},
 	"executable_code":   {},
 	"inline_data":       {},
+	// Responses API streaming carries model output text in a top-level "delta"
+	// string (e.g. response.output_text.delta). Chat/Claude "delta" values are
+	// objects, not strings, so they walk their own child keys and are unaffected.
+	"delta": {},
 }
 
 // toolCallKeys hold tool invocations, which count as output as soon as the array
@@ -303,7 +342,12 @@ func (w *bufferingResponseWriter) Write(data []byte) (int, error) {
 		return w.ResponseWriter.Write(data)
 	}
 	w.body.Write(data)
-	if w.body.Len() > emptyResponseProbeLimit {
+	// Hand over as soon as the buffered payload is known to carry output. For a
+	// streaming response this is the first content frame: withholding it any
+	// longer would stall the client (it receives nothing, so it can neither make
+	// progress nor cancel) until the probe limit or the stream ends. An empty
+	// reply carries no such frame, so it stays withheld and remains retractable.
+	if w.body.Len() > emptyResponseProbeLimit || payloadHasVisibleContent(w.body.Bytes()) {
 		w.handOver()
 	}
 	return len(data), nil

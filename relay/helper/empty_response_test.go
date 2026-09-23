@@ -237,6 +237,24 @@ func TestIsEmptyUpstreamResponse(t *testing.T) {
 			empty: false,
 		},
 		{
+			name:  "responses failed frame is a definitive outcome",
+			body:  "data: {\"type\":\"response.created\",\"response\":{\"id\":\"first\",\"status\":\"in_progress\"}}\n\ndata: {\"type\":\"response.failed\",\"response\":{\"id\":\"first\",\"status\":\"failed\",\"usage\":null,\"error\":{\"code\":\"server_error\",\"message\":\"boom\"}}}\n\n",
+			usage: &dto.Usage{},
+			empty: false,
+		},
+		{
+			name:  "responses completed with zero usage is a definitive outcome",
+			body:  "data: {\"type\":\"response.created\",\"response\":{\"id\":\"first\",\"status\":\"in_progress\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"first\",\"status\":\"completed\",\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0}}}\n\n",
+			usage: &dto.Usage{},
+			empty: false,
+		},
+		{
+			name:  "responses error frame is a definitive outcome",
+			body:  "data: {\"type\":\"error\",\"code\":\"context_length_exceeded\",\"message\":\"Input too long\",\"param\":null,\"sequence_number\":2}\n\n",
+			usage: &dto.Usage{},
+			empty: false,
+		},
+		{
 			name:  "missing usage and empty body",
 			body:  "",
 			usage: nil,

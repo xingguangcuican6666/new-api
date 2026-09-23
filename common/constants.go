@@ -134,6 +134,9 @@ var AutomaticEnableChannelEnabled = false
 var EmptyResponseRetryEnabled = true
 var EmptyResponseRetryInPlaceEnabled = true
 var QuotaRemindThreshold = 1000
+
+// PreConsumedQuota is retained for old option clients; token reservations now
+// use quota_setting.pre_consume_multiplier and the estimated input cost.
 var PreConsumedQuota = 500
 
 var RetryTimes = 3

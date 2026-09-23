@@ -8,8 +8,8 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
@@ -17,18 +17,59 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ShouldRetryRelayError(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int, channelSettings *dto.ChannelOtherSettings) bool {
-	if openaiErr == nil || ShouldSkipRetryAfterChannelAffinityFailure(c) || types.IsSkipRetryError(openaiErr) {
-		return false
+// DecideRelayRetry is the single retry decision for relay attempts. The reason
+// is recorded in the request policy decision events of the log details.
+func DecideRelayRetry(c *gin.Context, err *types.NewAPIError, retryTimes int) PolicyDecision {
+	if err == nil {
+		return PolicyDecision{Action: "stop", Reason: "request_completed", Source: "system"}
 	}
-	if retryTimes <= 0 {
-		return false
+	if ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		source := RequestPolicy(c).SessionModeSource
+		if source == "" {
+			source = "session_rule"
+		}
+		return PolicyDecision{Action: "stop", Reason: "strict_session", Source: source}
 	}
 	if GetChannelConstraints(c).SuppressesRetry() {
-		return false
+		return PolicyDecision{Action: "stop", Reason: "pinned_channel", Source: "channel_constraint"}
 	}
-	if types.IsChannelError(openaiErr) {
+	if types.IsChannelError(err) {
+		return PolicyDecision{Action: "retry", Reason: "channel_error", Source: "system"}
+	}
+	if types.IsSkipRetryError(err) {
+		return PolicyDecision{Action: "stop", Reason: "non_retryable_error", Source: "system"}
+	}
+	if retryTimes <= 0 {
+		return PolicyDecision{Action: "stop", Reason: "attempt_budget_exhausted", Source: "global"}
+	}
+	code := err.StatusCode
+	if code >= 200 && code < 300 {
+		return PolicyDecision{Action: "stop", Reason: "system_retry_exclusion", Source: "system"}
+	}
+	if code < 100 || code > 599 {
+		return PolicyDecision{Action: "retry", Reason: "unrecognized_status", Source: "system"}
+	}
+	if operation_setting.IsAlwaysSkipRetryCode(err.GetErrorCode()) || operation_setting.IsAlwaysSkipRetryStatusCode(code) {
+		return PolicyDecision{Action: "stop", Reason: "system_retry_exclusion", Source: "system"}
+	}
+	if operation_setting.ShouldRetryByStatusCode(code) {
+		return PolicyDecision{Action: "retry", Reason: "retry_status_matched", Source: "global"}
+	}
+	return PolicyDecision{Action: "stop", Reason: "status_not_retryable", Source: "global"}
+}
+
+// ShouldRetryRelayError layers the fork's per-channel retry overrides on top of
+// the canonical retry decision. Hard-stop reasons from DecideRelayRetry are
+// authoritative; otherwise the channel-scoped forced retry and empty-response
+// retry-in-place rule may still request a retry.
+func ShouldRetryRelayError(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int, channelSettings *dto.ChannelOtherSettings) bool {
+	decision := DecideRelayRetry(c, openaiErr, retryTimes)
+	if decision.Action == "retry" {
 		return true
+	}
+	switch decision.Reason {
+	case "non_retryable_error", "attempt_budget_exhausted", "pinned_channel", "strict_session", "request_completed":
+		return false
 	}
 	if ShouldRetryChannelError(openaiErr, channelSettings) {
 		return true
@@ -36,17 +77,7 @@ func ShouldRetryRelayError(c *gin.Context, openaiErr *types.NewAPIError, retryTi
 	if types.IsEmptyResponseRetryError(openaiErr) {
 		return true
 	}
-	code := openaiErr.StatusCode
-	if code >= 200 && code < 300 {
-		return false
-	}
-	if code < 100 || code > 599 {
-		return true
-	}
-	if operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
-		return false
-	}
-	return operation_setting.ShouldRetryByStatusCode(code)
+	return false
 }
 
 // ProcessChannelError records a channel failure and, when the real upstream
@@ -82,6 +113,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other.SetPublic("error_code", err.GetErrorCode())
 		other.SetPublic("status_code", err.StatusCode)
 		AppendRelayLogAdminInfo(c, relayInfo, other)
+		AppendResponseModelLogInfo(relayInfo, other)
 		AppendTaskPluginContextAuditInfo(c, other)
 		startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
 		if startTime.IsZero() {
