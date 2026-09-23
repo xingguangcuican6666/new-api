@@ -1355,12 +1355,13 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 }
 
 func TestSanitizedTaskPluginErrorIgnoresDetailOn5xx(t *testing.T) {
-	got := sanitizedTaskPluginError(http.StatusInternalServerError, "database secret")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	got := sanitizedTaskPluginError(c, http.StatusInternalServerError, "database secret")
 	assert.Equal(t, "server_error", got.Code)
 	assert.Equal(t, "Task request failed", got.Message)
 	assert.Equal(t, http.StatusInternalServerError, got.HTTPStatus)
 
-	got = sanitizedTaskPluginError(http.StatusBadGateway, "https://user:password@upstream.invalid")
+	got = sanitizedTaskPluginError(c, http.StatusBadGateway, "https://user:password@upstream.invalid")
 	assert.Equal(t, "server_error", got.Code)
 	assert.Equal(t, "Task request failed", got.Message)
 }

@@ -245,6 +245,14 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				writeMutex.Lock()
 				defer writeMutex.Unlock()
 				ExtendWriteDeadline(c)
+				// When upstream-error sanitization applies, intercept upstream
+				// error frames here (the sole write path, under writeMutex) and
+				// emit a standardized frame instead of forwarding the verbatim
+				// payload. The raw frame is logged inside the helper.
+				if MaybeWriteSanitizedStreamError(c, info, data) {
+					sr.Stop(fmt.Errorf("upstream stream error frame sanitized: %s", common.LocalLogPreview(data)))
+					return
+				}
 				dataHandler(data, sr)
 			}()
 			if sr.IsStopped() {

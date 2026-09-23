@@ -76,8 +76,13 @@ func RelayMidjourneyImage(c *gin.Context) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		responseBody, _ := io.ReadAll(resp.Body)
+		errMessage := string(responseBody)
+		if service.ShouldSanitizeUpstreamForClient(c) {
+			logger.LogError(c, fmt.Sprintf("image fetch failed (status %d): %s", resp.StatusCode, common.LocalLogPreview(errMessage)))
+			errMessage = service.StandardUpstreamMessage(c, resp.StatusCode)
+		}
 		c.JSON(resp.StatusCode, gin.H{
-			"error": string(responseBody),
+			"error": errMessage,
 		})
 		return
 	}
