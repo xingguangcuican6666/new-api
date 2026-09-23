@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting"
@@ -86,26 +87,163 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 	return claudeErr
 }
 
-const sanitizedUpstreamErrorMessage = "upstream request failed; contact the service administrator with the request ID"
+// sanitizedUpstreamErrorMessage is the fallback client message used when no
+// status-code-specific phrasing applies. Single source, so the wording (and
+// its language) can be changed in one place.
+const sanitizedUpstreamErrorMessage = "The upstream request failed. Please contact the service administrator with the request ID."
 
-// sanitizeUpstreamError pins the sanitized text for client-facing projections
-// only. Err and RelayError keep the verbatim upstream error, so channel
-// auto-disable keyword matching, retry classification, and error logs all
-// operate on the real error. The requester's own administrators and root get
-// the verbatim upstream error in the API response as well.
-func sanitizeUpstreamError(c *gin.Context, newApiErr *types.NewAPIError, responseBodyPreview string) {
-	if !setting.SanitizeUpstreamErrorEnabled || newApiErr == nil || newApiErr.Err == nil {
-		return
+// contentSafetyClientMessage replaces content-policy refusals whose verbatim
+// text names the upstream provider (e.g. "request blocked by Gemini API: ...").
+// The client still learns the content was rejected — an actionable signal —
+// without being told which provider rejected it.
+const contentSafetyClientMessage = "Your request was rejected by the content safety policy. Please modify your input."
+
+// standardUpstreamStatusMessages maps a final HTTP status code to a fixed,
+// sensitive-data-free client message. Status codes absent here fall back to
+// sanitizedUpstreamErrorMessage.
+var standardUpstreamStatusMessages = map[int]string{
+	http.StatusUnauthorized:          "The upstream provider denied access (account or quota issue). Please retry later or contact the service administrator.",
+	http.StatusForbidden:             "The upstream provider denied access (account or quota issue). Please retry later or contact the service administrator.",
+	http.StatusPaymentRequired:       "The upstream account has insufficient balance. Please contact the service administrator.",
+	http.StatusNotFound:              "The requested upstream model or resource is unavailable.",
+	http.StatusRequestTimeout:        "The upstream provider timed out. Please retry.",
+	http.StatusGatewayTimeout:        "The upstream provider timed out. Please retry.",
+	http.StatusRequestEntityTooLarge: "The request was too large for the upstream provider.",
+	http.StatusTooManyRequests:       "The upstream provider is rate limiting or out of quota. Please retry later.",
+	http.StatusInternalServerError:   "The upstream service is temporarily unavailable. Please retry, or contact the service administrator with the request ID.",
+	http.StatusBadGateway:            "The upstream service is temporarily unavailable. Please retry, or contact the service administrator with the request ID.",
+	http.StatusServiceUnavailable:    "The upstream service is temporarily unavailable. Please retry, or contact the service administrator with the request ID.",
+}
+
+// localActionableErrorCodes are error codes this service authors itself and
+// whose message the client must read verbatim to act on (fix the request, top
+// up their own wallet, pick another model, retry another channel). They are
+// never replaced by the standardized upstream phrasing. Upstream provider codes
+// are a dynamic open set, so the design is an allowlist of local codes rather
+// than a denylist of upstream ones.
+var localActionableErrorCodes = map[types.ErrorCode]bool{
+	types.ErrorCodeInvalidRequest:             true,
+	types.ErrorCodeSensitiveWordsDetected:     true,
+	types.ErrorCodeCountTokenFailed:           true,
+	types.ErrorCodeModelPriceError:            true,
+	types.ErrorCodeInvalidApiType:             true,
+	types.ErrorCodeGetChannelFailed:           true,
+	types.ErrorCodeGenRelayInfoFailed:         true,
+	types.ErrorCodeReadRequestBodyFailed:      true,
+	types.ErrorCodeConvertRequestFailed:       true,
+	types.ErrorCodeAccessDenied:               true,
+	types.ErrorCodeBadRequestBody:             true,
+	types.ErrorCodeInsufficientUserQuota:      true,
+	types.ErrorCodePreConsumeTokenQuotaFailed: true,
+	types.ErrorCodeQueryDataError:             true,
+	types.ErrorCodeUpdateDataError:            true,
+	types.ErrorCodeModelNotFound:              true,
+	types.ErrorCodeJsonMarshalFailed:          true,
+}
+
+// isLocalActionableErrorCode reports whether code was authored by this service
+// and must reach the client verbatim. All channel-selection/config codes (the
+// "channel:" prefix) qualify as well.
+func isLocalActionableErrorCode(code types.ErrorCode) bool {
+	if strings.HasPrefix(string(code), "channel:") {
+		return true
 	}
-	if c != nil && c.GetInt("role") >= common.RoleAdminUser {
-		return
+	return localActionableErrorCodes[code]
+}
+
+// isContentSafetyErrorCode reports whether code marks a content-policy refusal
+// whose verbatim text embeds the upstream provider name. These get a dedicated
+// provider-free message rather than the generic status-code phrasing, so the
+// "content rejected, modify your input" signal is preserved.
+func isContentSafetyErrorCode(code types.ErrorCode) bool {
+	return code == types.ErrorCodePromptBlocked || code == types.ErrorCodeViolationFeeGrokCSAM
+}
+
+// withRequestId appends the request id to msg when one is present on the
+// context, matching the format used elsewhere for support lookups.
+func withRequestId(c *gin.Context, msg string) string {
+	if c == nil {
+		return msg
 	}
-	logger.LogError(c, fmt.Sprintf("upstream error sanitized for client: %s, body: %s", newApiErr.Err.Error(), responseBodyPreview))
-	clientMessage := sanitizedUpstreamErrorMessage
 	if requestId := c.GetString(common.RequestIdKey); requestId != "" {
-		clientMessage = common.MessageWithRequestId(clientMessage, requestId)
+		return common.MessageWithRequestId(msg, requestId)
 	}
-	newApiErr.SetClientMessage(clientMessage)
+	return msg
+}
+
+// StandardUpstreamMessage returns the canned client-facing message for the
+// given final HTTP status code, with the request id appended.
+func StandardUpstreamMessage(c *gin.Context, statusCode int) string {
+	msg, ok := standardUpstreamStatusMessages[statusCode]
+	if !ok {
+		msg = sanitizedUpstreamErrorMessage
+	}
+	return withRequestId(c, msg)
+}
+
+// ShouldSanitizeUpstreamForClient reports whether upstream error text must be
+// hidden from the current caller: the feature is enabled and the caller is not
+// an administrator. Administrators and root keep seeing the verbatim upstream
+// error. A failed/absent user lookup resolves to non-admin, i.e. the safe
+// (no-leak) direction.
+func ShouldSanitizeUpstreamForClient(c *gin.Context) bool {
+	if !setting.SanitizeUpstreamErrorEnabled {
+		return false
+	}
+	if c != nil && model.IsAdmin(c.GetInt("id")) {
+		return false
+	}
+	return true
+}
+
+// StandardizeUpstreamError replaces the client-facing message of an
+// upstream-origin error with a fixed, sensitive-data-free message keyed by the
+// final HTTP status code, when SANITIZE_UPSTREAM_ERROR is on and the caller is
+// not an administrator. Err is left untouched, so error logs, retry
+// classification and channel auto-disable keyword matching keep operating on
+// the verbatim upstream error; administrators and root also receive the
+// verbatim error in their own API response.
+//
+// Routing: locally-authored actionable errors keep their message; content-policy
+// refusals get the provider-free content-safety message; everything else gets
+// the status-code phrasing.
+func StandardizeUpstreamError(c *gin.Context, e *types.NewAPIError) {
+	if e == nil || !ShouldSanitizeUpstreamForClient(c) {
+		return
+	}
+	code := e.GetErrorCode()
+	if isLocalActionableErrorCode(code) {
+		return
+	}
+	if isContentSafetyErrorCode(code) {
+		e.SetClientMessage(withRequestId(c, contentSafetyClientMessage))
+		return
+	}
+	e.SetClientMessage(StandardUpstreamMessage(c, e.StatusCode))
+}
+
+// StandardizeUpstreamTaskError applies the same standardization to a Task
+// error's client-facing Message. Task/Midjourney paths carry their own
+// TaskError/MidjourneyResponse types instead of NewAPIError, so they share the
+// phrasing through this helper rather than through clientMessage. Locally
+// authored errors (LocalError set, or a local actionable code) are left
+// verbatim. Returns whether the message was replaced.
+func StandardizeUpstreamTaskError(c *gin.Context, taskErr *taskdto.TaskError) bool {
+	if taskErr == nil || taskErr.StatusCode < http.StatusBadRequest {
+		return false
+	}
+	if taskErr.LocalError || isLocalActionableErrorCode(types.ErrorCode(taskErr.Code)) {
+		return false
+	}
+	if !ShouldSanitizeUpstreamForClient(c) {
+		return false
+	}
+	if isContentSafetyErrorCode(types.ErrorCode(taskErr.Code)) {
+		taskErr.Message = withRequestId(c, contentSafetyClientMessage)
+		return true
+	}
+	taskErr.Message = StandardUpstreamMessage(c, taskErr.StatusCode)
+	return true
 }
 
 func RelayErrorHandler(c *gin.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
@@ -145,21 +283,25 @@ func RelayErrorHandler(c *gin.Context, resp *http.Response, showBodyWhenFail boo
 			if showBodyWhenFail {
 				newApiErr.Err = buildErrWithBody(newApiErr.Error())
 			}
-			sanitizeUpstreamError(c, newApiErr, responseBodyPreview)
+			// Client-facing standardization is applied once at the relay exit
+			// (controller.Relay defer), so the verbatim Err survives for logs,
+			// retry classification and channel auto-disable here.
 			return
 		}
 	}
 	message := errResponse.ToMessage()
 	if message == "" {
 		// The body parsed as JSON but carried no usable error message; log the
-		// raw body so the upstream failure remains diagnosable.
+		// raw body so the upstream failure remains diagnosable, and fall back to
+		// a status-based message so client-facing projections do not degrade to
+		// a bare error-type string when standardization is off.
 		logger.LogError(c, fmt.Sprintf("bad response status code %d with empty error message, body: %s", resp.StatusCode, responseBodyPreview))
+		message = fmt.Sprintf("bad response status code %d", resp.StatusCode)
 	}
 	newApiErr = types.NewOpenAIError(errors.New(message), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 	if showBodyWhenFail {
 		newApiErr.Err = buildErrWithBody(newApiErr.Error())
 	}
-	sanitizeUpstreamError(c, newApiErr, responseBodyPreview)
 	return
 }
 

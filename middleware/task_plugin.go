@@ -1238,7 +1238,7 @@ func RespondTaskPluginError(c *gin.Context, taskErr *dto.TaskError) bool {
 	if !exists || !ok || pinned.Plugin == nil {
 		return false
 	}
-	sanitized := sanitizedTaskPluginError(taskErr.StatusCode, taskErr.Message)
+	sanitized := sanitizedTaskPluginError(c, taskErr.StatusCode, taskErr.Message)
 	requestID := c.GetString(common.RequestIdKey)
 	hasRenderer, err := pinned.Plugin.Engine.HasCallablePath(c.Request.Context(), "native", "error")
 	requestValue, exists := c.Get(pluginruntime.ContextKeyRouteRequest)
@@ -1294,7 +1294,7 @@ func abortTaskPluginRouteError(c *gin.Context, status int) {
 }
 
 func abortTaskPluginRouteErrorDetail(c *gin.Context, status int, detail string) {
-	taskErr := sanitizedTaskPluginError(status, detail)
+	taskErr := sanitizedTaskPluginError(c, status, detail)
 	c.Abort()
 	if RespondTaskPluginError(c, &dto.TaskError{Code: taskErr.Code, Message: detail, StatusCode: taskErr.HTTPStatus}) {
 		return
@@ -1310,7 +1310,7 @@ func abortTaskPluginRouteErrorDetail(c *gin.Context, status int, detail string) 
 	})
 }
 
-func sanitizedTaskPluginError(status int, detail string) dto.TaskPluginError {
+func sanitizedTaskPluginError(c *gin.Context, status int, detail string) dto.TaskPluginError {
 	var taskErr dto.TaskPluginError
 	switch status {
 	case http.StatusBadRequest:
@@ -1335,7 +1335,10 @@ func sanitizedTaskPluginError(status int, detail string) dto.TaskPluginError {
 			taskErr = dto.TaskPluginError{Code: "server_error", Message: "Task request failed", HTTPStatus: status, Retryable: status >= 500}
 		}
 	}
-	if detail != "" && taskErr.HTTPStatus < 500 {
+	// The 4xx detail is upstream-provided text; suppress it for non-admin
+	// callers when upstream error sanitization is on so it cannot leak, and
+	// fall back to the fixed per-status message above.
+	if detail != "" && taskErr.HTTPStatus < 500 && !service.ShouldSanitizeUpstreamForClient(c) {
 		taskErr.Message = detail
 	}
 	return taskErr

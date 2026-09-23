@@ -91,6 +91,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	defer func() {
 		if newAPIError != nil {
 			logger.LogError(c, fmt.Sprintf("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
+			// Standardize the client-facing message for upstream-origin errors
+			// (feature-gated, non-admin) before it is projected. This is the
+			// single non-streaming exit, so it covers RelayErrorHandler, the
+			// 200-with-error-body channel adapters, and mid-flight errors
+			// returned as NewAPIError. Err stays verbatim for the log above and
+			// for retry/auto-disable classification.
+			service.StandardizeUpstreamError(c, newAPIError)
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
@@ -449,13 +456,22 @@ func RelayMidjourney(c *gin.Context) {
 			mjErr.Result = "当前分组负载已饱和，请稍后再试，或升级账户以提升服务质量。"
 			statusCode = http.StatusTooManyRequests
 		}
+		verbatimDescription := fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)
+		clientDescription := verbatimDescription
+		// Code 30 is our own saturation notice (no upstream text); every other
+		// failure may carry the upstream body verbatim in Description/Result, so
+		// standardize the client-facing text while keeping the machine-readable
+		// code. The verbatim text stays in the log below.
+		if mjErr.Code != 30 && service.ShouldSanitizeUpstreamForClient(c) {
+			clientDescription = service.StandardUpstreamMessage(c, statusCode)
+		}
 		c.JSON(statusCode, gin.H{
-			"description": fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result),
+			"description": clientDescription,
 			"type":        "upstream_error",
 			"code":        mjErr.Code,
 		})
 		channelId := c.GetInt("channel_id")
-		logger.LogError(c, fmt.Sprintf("relay error (channel #%d, status code %d): %s", channelId, statusCode, fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)))
+		logger.LogError(c, fmt.Sprintf("relay error (channel #%d, status code %d): %s", channelId, statusCode, verbatimDescription))
 	}
 }
 
@@ -943,10 +959,16 @@ func respondTaskSubmissionError(c *gin.Context, taskErr *taskdto.TaskError) {
 	respondTaskError(c, taskErr)
 }
 
-// respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）
+// respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写与上游报错标准话术）
 func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
-	if taskErr.StatusCode == http.StatusTooManyRequests {
-		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
+	// Standardize upstream-origin failures (feature-gated, non-admin) before
+	// rendering; the verbatim Message stays in taskErr.Error/logs. When it
+	// applies, the status-code phrasing already covers 429, so skip the legacy
+	// override below.
+	if !service.StandardizeUpstreamTaskError(c, taskErr) {
+		if taskErr.StatusCode == http.StatusTooManyRequests {
+			taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
+		}
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
 }
