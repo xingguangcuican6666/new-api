@@ -23,6 +23,7 @@ import { ClaudeSettingsCard } from './claude-settings-card'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
+import { RoutingReliabilitySection } from './routing-reliability-section'
 
 function formatJsonForEditor(value: string, fallback: string) {
   const raw = (value ?? '').toString().trim()
@@ -130,6 +131,25 @@ const MODELS_SECTIONS = [
         defaultValues={{
           enabled: settings['model_deployment.ionet.enabled'],
           apiKey: settings['model_deployment.ionet.api_key'],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'routing-reliability',
+    titleKey: 'Routing Reliability',
+    build: (settings: ModelSettings) => (
+      <RoutingReliabilitySection
+        defaultValues={{
+          EmptyResponseRetryEnabled: settings.EmptyResponseRetryEnabled,
+          EmptyResponseRetryInPlaceEnabled:
+            settings.EmptyResponseRetryInPlaceEnabled,
+          RuntimeAutomaticDisableChannelEnabled:
+            settings.RuntimeAutomaticDisableChannelEnabled,
+          RuntimeAutomaticDisableStatusCodes:
+            settings.RuntimeAutomaticDisableStatusCodes,
+          RuntimeAutomaticDisableKeywords:
+            settings.RuntimeAutomaticDisableKeywords,
         }}
       />
     ),

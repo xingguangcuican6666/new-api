@@ -351,7 +351,6 @@ describe('request policy settings', () => {
 
   it.each([
     ['/system-settings/models/channel-affinity', 'routing'],
-    ['/system-settings/models/routing-reliability', 'routing'],
     ['/system-settings/security/sensitive-words', 'filtering'],
     ['/system-settings/operations/monitoring', 'health'],
     ['/system-settings/request-policies/', 'routing'],
