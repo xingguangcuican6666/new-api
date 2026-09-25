@@ -98,6 +98,9 @@ func Distribute() func(c *gin.Context) {
 				}
 			}
 		}
+		// zliu 微路由：token「可用模型限制」已校验过用户实际请求的 zliu-auto（上方 line 70），
+		// 此处再把它判定并改写成真实模型，供下方渠道选择、上游请求与计费使用。fail-open。
+		maybeApplyZliuRouter(c, modelRequest)
 		if pinned || shouldSelectChannel {
 			usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 			var selectErr *service.ChannelSelectError
