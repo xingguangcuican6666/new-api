@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  AppWindow,
   Box,
   ClipboardList,
   CreditCard,
@@ -167,6 +168,12 @@ export function useSidebarData(): SidebarData {
             title: t('Task Plugins'),
             url: '/task-plugins',
             icon: PlugZap,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
+          {
+            title: t('OAuth Applications'),
+            url: '/oauth-apps',
+            icon: AppWindow,
             requiredRole: ROLE.SUPER_ADMIN,
           },
           {

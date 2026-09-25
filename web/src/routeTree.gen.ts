@@ -27,6 +27,7 @@ import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
+import { Route as AuthenticatedOauthConsentRouteImport } from './routes/_authenticated/oauth-consent'
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
@@ -42,6 +43,7 @@ import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenti
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authenticated/models/$section'
+import { Route as AuthenticatedOauthAppsIndexRouteImport } from './routes/_authenticated/oauth-apps/index'
 import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_authenticated/playground/index'
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile/index'
 import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/_authenticated/redemption-codes/index'
@@ -161,6 +163,12 @@ const AuthenticatedChat2linkRoute = AuthenticatedChat2linkRouteImport.update({
   path: '/chat2link',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedOauthConsentRoute =
+  AuthenticatedOauthConsentRouteImport.update({
+    id: '/oauth-consent',
+    path: '/oauth-consent',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemSettingsRouteRoute =
   AuthenticatedSystemSettingsRouteRouteImport.update({
     id: '/system-settings',
@@ -241,6 +249,12 @@ const AuthenticatedModelsSectionRoute =
   AuthenticatedModelsSectionRouteImport.update({
     id: '/models/$section',
     path: '/models/$section',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedOauthAppsIndexRoute =
+  AuthenticatedOauthAppsIndexRouteImport.update({
+    id: '/oauth-apps/',
+    path: '/oauth-apps/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedPlaygroundIndexRoute =
@@ -440,6 +454,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/oauth-consent': typeof AuthenticatedOauthConsentRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -456,6 +471,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
+  '/oauth-apps/': typeof AuthenticatedOauthAppsIndexRoute
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/profile/': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
@@ -502,6 +518,7 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/oauth-consent': typeof AuthenticatedOauthConsentRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
   '/pricing': typeof PricingIndexRoute
@@ -518,6 +535,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
+  '/oauth-apps': typeof AuthenticatedOauthAppsIndexRoute
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
   '/profile': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes': typeof AuthenticatedRedemptionCodesIndexRoute
@@ -568,6 +586,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
+  '/_authenticated/oauth-consent': typeof AuthenticatedOauthConsentRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -584,6 +603,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
+  '/_authenticated/oauth-apps/': typeof AuthenticatedOauthAppsIndexRoute
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
   '/_authenticated/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
@@ -633,6 +653,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/oauth-consent'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -649,6 +670,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/keys/'
     | '/models/'
+    | '/oauth-apps/'
     | '/playground/'
     | '/profile/'
     | '/redemption-codes/'
@@ -695,6 +717,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/oauth-consent'
     | '/oauth/$provider'
     | '/about'
     | '/pricing'
@@ -711,6 +734,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/keys'
     | '/models'
+    | '/oauth-apps'
     | '/playground'
     | '/profile'
     | '/redemption-codes'
@@ -760,6 +784,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/chat2link'
+    | '/_authenticated/oauth-consent'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -776,6 +801,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
+    | '/_authenticated/oauth-apps/'
     | '/_authenticated/playground/'
     | '/_authenticated/profile/'
     | '/_authenticated/redemption-codes/'
@@ -953,6 +979,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChat2linkRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/oauth-consent': {
+      id: '/_authenticated/oauth-consent'
+      path: '/oauth-consent'
+      fullPath: '/oauth-consent'
+      preLoaderRoute: typeof AuthenticatedOauthConsentRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system-settings': {
       id: '/_authenticated/system-settings'
       path: '/system-settings'
@@ -1056,6 +1089,13 @@ declare module '@tanstack/react-router' {
       path: '/models/$section'
       fullPath: '/models/$section'
       preLoaderRoute: typeof AuthenticatedModelsSectionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/oauth-apps/': {
+      id: '/_authenticated/oauth-apps/'
+      path: '/oauth-apps'
+      fullPath: '/oauth-apps/'
+      preLoaderRoute: typeof AuthenticatedOauthAppsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/playground/': {
@@ -1363,6 +1403,7 @@ const AuthenticatedSystemSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
+  AuthenticatedOauthConsentRoute: typeof AuthenticatedOauthConsentRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1373,6 +1414,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
+  AuthenticatedOauthAppsIndexRoute: typeof AuthenticatedOauthAppsIndexRoute
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
   AuthenticatedRedemptionCodesIndexRoute: typeof AuthenticatedRedemptionCodesIndexRoute
@@ -1389,6 +1431,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemSettingsRouteRoute:
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
+  AuthenticatedOauthConsentRoute: AuthenticatedOauthConsentRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
@@ -1399,6 +1442,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
+  AuthenticatedOauthAppsIndexRoute: AuthenticatedOauthAppsIndexRoute,
   AuthenticatedPlaygroundIndexRoute: AuthenticatedPlaygroundIndexRoute,
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedRedemptionCodesIndexRoute:

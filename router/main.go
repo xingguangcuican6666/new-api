@@ -13,6 +13,9 @@ import (
 )
 
 func SetRouter(router *gin.Engine, assets WebAssets) {
+	// Registered before the relay router installs its engine-wide CORS so the
+	// authorization server's own group-scoped CORS is the only one applied.
+	SetOAuthServerRouter(router)
 	SetApiRouter(router)
 	SetDashboardRouter(router)
 	SetRelayRouter(router)

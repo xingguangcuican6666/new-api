@@ -443,5 +443,30 @@ func SetApiRouter(router *gin.Engine) {
 			deploymentsRoute.POST("/:id/extend", controller.ExtendDeployment)
 			deploymentsRoute.DELETE("/:id", controller.DeleteDeployment)
 		}
+
+		// OAuth authorization server — client-application administration (root only).
+		oauthClientsRoute := apiRouter.Group("/oauth-server")
+		oauthClientsRoute.Use(middleware.RootAuth(), middleware.DisableCache())
+		{
+			oauthClientsRoute.GET("/scopes", controller.GetOAuthServerScopes)
+			oauthClientsRoute.GET("/clients", controller.ListOAuthClients)
+			oauthClientsRoute.POST("/clients", controller.CreateOAuthClient)
+			oauthClientsRoute.GET("/clients/:id", controller.GetOAuthClient)
+			oauthClientsRoute.PUT("/clients/:id", controller.UpdateOAuthClient)
+			oauthClientsRoute.DELETE("/clients/:id", controller.DeleteOAuthClient)
+			oauthClientsRoute.POST("/clients/:id/rotate-secret", controller.RotateOAuthClientSecret)
+		}
+
+		// OAuth authorization server — consent flow and the signed-in user's own
+		// authorized-application list, all under a dashboard user session.
+		oauthUserRoute := apiRouter.Group("/oauth-server")
+		oauthUserRoute.Use(middleware.UserAuth(), middleware.DisableCache())
+		{
+			oauthUserRoute.GET("/authorize/context", controller.GetOAuthConsentContext)
+			oauthUserRoute.POST("/authorize/approve", middleware.CriticalRateLimit(), controller.ApproveOAuthConsent)
+			oauthUserRoute.POST("/authorize/deny", controller.DenyOAuthConsent)
+			oauthUserRoute.GET("/authorizations", controller.ListMyOAuthAuthorizations)
+			oauthUserRoute.DELETE("/authorizations/:client_id", controller.DeleteMyOAuthAuthorization)
+		}
 	}
 }

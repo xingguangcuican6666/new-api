@@ -32,6 +32,36 @@ export interface ApiResponse<T = unknown> {
 }
 
 /**
+ * A third-party OAuth application the user has authorized to sign in with
+ * their new-api account (new-api acting as the OAuth 2.0 / OIDC provider).
+ */
+export interface OAuthAuthorizationClient {
+  name: string
+  description: string
+  logo: string
+  homepage: string
+}
+
+export interface OAuthAuthorizationScope {
+  name: string
+  title: string
+  description: string
+}
+
+export interface OAuthAuthorization {
+  client_id: string
+  client: OAuthAuthorizationClient
+  /** Raw scope names granted to the client. */
+  scopes: string[]
+  /** Human-readable details for the granted scopes, in display order. */
+  scope_details: OAuthAuthorizationScope[]
+  /** Unix seconds. */
+  created_at: number
+  /** Unix seconds. */
+  updated_at: number
+}
+
+/**
  * User profile data
  */
 export interface UserProfile {

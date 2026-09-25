@@ -1,0 +1,311 @@
+package controller
+
+import (
+	"errors"
+	"strconv"
+	"strings"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/oauthserver"
+
+	"github.com/gin-gonic/gin"
+)
+
+// This file implements the dashboard-side management surface for new-api's OAuth
+// authorization server: admin (RootAuth) CRUD over registered client
+// applications, and the signed-in user's view of which applications they have
+// authorized. The public OAuth wire endpoints live in oauth_server.go.
+
+// oauthClientRequest is the admin create/update payload for a client app.
+type oauthClientRequest struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Logo         string   `json:"logo"`
+	Homepage     string   `json:"homepage"`
+	RedirectUris []string `json:"redirect_uris"`
+	Scopes       []string `json:"scopes"`
+	IsPublic     bool     `json:"is_public"`
+	Status       int      `json:"status"`
+}
+
+// oauthClientResponse is the client shape returned to the dashboard, decoding
+// the stored JSON/space-delimited fields into arrays. The secret hash is never
+// included (OAuthClient hides it via json:"-").
+type oauthClientResponse struct {
+	Id           int      `json:"id"`
+	ClientId     string   `json:"client_id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Logo         string   `json:"logo"`
+	Homepage     string   `json:"homepage"`
+	RedirectUris []string `json:"redirect_uris"`
+	Scopes       []string `json:"scopes"`
+	IsPublic     bool     `json:"is_public"`
+	Status       int      `json:"status"`
+	OwnerUserId  int      `json:"owner_user_id"`
+	CreatedAt    int64    `json:"created_at"`
+	UpdatedAt    int64    `json:"updated_at"`
+}
+
+func newOAuthClientResponse(client *model.OAuthClient) oauthClientResponse {
+	return oauthClientResponse{
+		Id:           client.Id,
+		ClientId:     client.ClientId,
+		Name:         client.Name,
+		Description:  client.Description,
+		Logo:         client.Logo,
+		Homepage:     client.Homepage,
+		RedirectUris: client.GetRedirectUris(),
+		Scopes:       client.GetScopes(),
+		IsPublic:     client.IsPublic,
+		Status:       client.Status,
+		OwnerUserId:  client.OwnerUserId,
+		CreatedAt:    client.CreatedAt,
+		UpdatedAt:    client.UpdatedAt,
+	}
+}
+
+// applyOAuthClientRequest copies request fields onto a client, rejecting scopes
+// outside the server catalog. Redirect-URI shape and non-empty scopes/URIs are
+// enforced by OAuthClient.validate() on Insert/Update.
+func applyOAuthClientRequest(client *model.OAuthClient, req *oauthClientRequest) error {
+	scopes := oauthserver.ParseScopes(strings.Join(req.Scopes, " "))
+	for _, scope := range scopes {
+		if !oauthserver.IsSupportedScope(scope) {
+			return errors.New("unknown scope: " + scope)
+		}
+	}
+	encodedUris, err := common.Marshal(req.RedirectUris)
+	if err != nil {
+		return err
+	}
+	client.Name = strings.TrimSpace(req.Name)
+	client.Description = req.Description
+	client.Logo = req.Logo
+	client.Homepage = req.Homepage
+	client.RedirectUris = string(encodedUris)
+	client.Scopes = oauthserver.JoinScopes(scopes)
+	client.IsPublic = req.IsPublic
+	if req.Status == model.OAuthClientStatusDisabled {
+		client.Status = model.OAuthClientStatusDisabled
+	} else {
+		client.Status = model.OAuthClientStatusEnabled
+	}
+	return nil
+}
+
+// ListOAuthClients backs GET /api/oauth-server/clients (RootAuth).
+func ListOAuthClients(c *gin.Context) {
+	clients, err := model.GetAllOAuthClients()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	out := make([]oauthClientResponse, 0, len(clients))
+	for _, client := range clients {
+		out = append(out, newOAuthClientResponse(client))
+	}
+	common.ApiSuccess(c, out)
+}
+
+// GetOAuthClient backs GET /api/oauth-server/clients/:id (RootAuth).
+func GetOAuthClient(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid client id")
+		return
+	}
+	client, err := model.GetOAuthClientById(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, newOAuthClientResponse(client))
+}
+
+// CreateOAuthClient backs POST /api/oauth-server/clients (RootAuth). It mints a
+// client_id and, for confidential clients, a client secret returned exactly once
+// in plaintext (only its hash is stored).
+func CreateOAuthClient(c *gin.Context) {
+	var req oauthClientRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "invalid request body")
+		return
+	}
+	client := &model.OAuthClient{
+		ClientId:    model.GenerateOAuthClientId(),
+		OwnerUserId: c.GetInt("id"),
+	}
+	if err := applyOAuthClientRequest(client, &req); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	var secret string
+	if !client.IsPublic {
+		generated, err := model.GenerateOAuthClientSecret()
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		secret = generated
+		client.SetSecret(secret)
+	}
+	if err := client.Insert(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"client": newOAuthClientResponse(client),
+		"secret": secret,
+	})
+}
+
+// UpdateOAuthClient backs PUT /api/oauth-server/clients/:id (RootAuth). The
+// stored secret is preserved (the loaded client carries its hash); switching a
+// client to public clears the secret so a stale one can never be replayed.
+func UpdateOAuthClient(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid client id")
+		return
+	}
+	client, err := model.GetOAuthClientById(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var req oauthClientRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "invalid request body")
+		return
+	}
+	wasPublic := client.IsPublic
+	if err := applyOAuthClientRequest(client, &req); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	if client.IsPublic && !wasPublic {
+		client.SecretHash = ""
+	}
+	if err := client.Update(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, newOAuthClientResponse(client))
+}
+
+// RotateOAuthClientSecret backs POST /api/oauth-server/clients/:id/rotate-secret
+// (RootAuth), issuing a fresh secret and returning it once. Existing tokens keep
+// working; only future client authentication requires the new secret.
+func RotateOAuthClientSecret(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid client id")
+		return
+	}
+	client, err := model.GetOAuthClientById(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if client.IsPublic {
+		common.ApiErrorMsg(c, "public clients do not use a client secret")
+		return
+	}
+	secret, err := model.GenerateOAuthClientSecret()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	client.SetSecret(secret)
+	if err := client.Update(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"client": newOAuthClientResponse(client),
+		"secret": secret,
+	})
+}
+
+// DeleteOAuthClient backs DELETE /api/oauth-server/clients/:id (RootAuth),
+// cascading to the client's tokens and grants.
+func DeleteOAuthClient(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid client id")
+		return
+	}
+	if err := model.DeleteOAuthClient(id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+// GetOAuthServerScopes backs GET /api/oauth-server/scopes (RootAuth), returning
+// the scope catalog so the client editor can offer the grantable scopes.
+func GetOAuthServerScopes(c *gin.Context) {
+	common.ApiSuccess(c, oauthserver.SupportedScopes())
+}
+
+// ListMyOAuthAuthorizations backs GET /api/oauth-server/authorizations
+// (UserAuth), listing the applications the signed-in user has connected, with
+// the granted scopes rendered for display. A grant whose client has since been
+// deleted is skipped.
+func ListMyOAuthAuthorizations(c *gin.Context) {
+	grants, err := model.ListOAuthUserGrants(c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	out := make([]gin.H, 0, len(grants))
+	for _, grant := range grants {
+		client, err := model.GetOAuthClientByClientId(grant.ClientId)
+		if err != nil {
+			continue
+		}
+		scopeNames := grant.GetScopes()
+		scopeDetails := make([]gin.H, 0, len(scopeNames))
+		for _, name := range scopeNames {
+			if scope, ok := oauthserver.LookupScope(name); ok {
+				scopeDetails = append(scopeDetails, gin.H{
+					"name":        scope.Name,
+					"title":       scope.Title,
+					"description": scope.Description,
+				})
+			}
+		}
+		out = append(out, gin.H{
+			"client_id": grant.ClientId,
+			"client": gin.H{
+				"name":        client.Name,
+				"description": client.Description,
+				"logo":        client.Logo,
+				"homepage":    client.Homepage,
+			},
+			"scopes":        scopeNames,
+			"scope_details": scopeDetails,
+			"created_at":    grant.CreatedAt,
+			"updated_at":    grant.UpdatedAt,
+		})
+	}
+	common.ApiSuccess(c, out)
+}
+
+// DeleteMyOAuthAuthorization backs DELETE /api/oauth-server/authorizations/:client_id
+// (UserAuth), disconnecting an application: the consent is removed and every
+// token issued to that client for this user is revoked.
+func DeleteMyOAuthAuthorization(c *gin.Context) {
+	clientId := strings.TrimSpace(c.Param("client_id"))
+	if clientId == "" {
+		common.ApiErrorMsg(c, "invalid client id")
+		return
+	}
+	if err := model.DeleteOAuthUserGrant(c.GetInt("id"), clientId); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}

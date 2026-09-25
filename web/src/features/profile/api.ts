@@ -31,6 +31,7 @@ import type {
   CheckinResponse,
   AccountSecurityResult,
   EmailBindingFlow,
+  OAuthAuthorization,
 } from './types'
 
 // ============================================================================
@@ -244,6 +245,31 @@ export async function revokeLoginSession(sid: string): Promise<ApiResponse> {
 
 export async function revokeOtherLoginSessions(): Promise<ApiResponse> {
   const res = await api.post('/api/user/sessions/revoke-others')
+  return res.data
+}
+
+// ============================================================================
+// OAuth Authorization APIs
+//
+// Manage the third-party applications the user has connected to their new-api
+// account (new-api acting as the OAuth 2.0 / OIDC authorization server).
+// ============================================================================
+
+export async function getOAuthAuthorizations(): Promise<
+  ApiResponse<OAuthAuthorization[]>
+> {
+  const res = await api.get('/api/oauth-server/authorizations')
+  return res.data
+}
+
+// Disconnect an application: removes the stored consent and revokes every
+// token issued to that client for the current user.
+export async function revokeOAuthAuthorization(
+  clientId: string
+): Promise<ApiResponse> {
+  const res = await api.delete(
+    `/api/oauth-server/authorizations/${encodeURIComponent(clientId)}`
+  )
   return res.data
 }
 

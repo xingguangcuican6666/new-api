@@ -819,4 +819,18 @@ export const STATIC_I18N_KEYS = [
   'Vendor name and icon must not exceed 128 characters.',
   'Shown',
   'Not shown',
+
+  // OAuth applications (constants-driven success/error messages)
+  'Failed to load OAuth applications',
+  'Failed to create OAuth application',
+  'Failed to update OAuth application',
+  'Failed to delete OAuth application',
+  'Failed to regenerate client secret',
+  'Failed to load available scopes',
+  'OAuth application created successfully',
+  'OAuth application updated successfully',
+  'OAuth application deleted successfully',
+  'OAuth application enabled successfully',
+  'OAuth application disabled successfully',
+  'Client secret regenerated successfully',
 ] as const
