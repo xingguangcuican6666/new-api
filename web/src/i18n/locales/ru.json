@@ -7057,6 +7057,7 @@
     "This immediately invalidates the current client secret. Update the application with the new secret before it can authenticate again.": "Это немедленно делает текущий секрет клиента недействительным. Обновите приложение новым секретом, прежде чем оно сможет снова пройти аутентификацию.",
     "This revokes access for {{name}} and signs you out. You can reconnect it later by authorizing again.": "Это отзывает доступ для {{name}} и выполняет ваш выход. Позже вы сможете снова подключить его, повторно авторизовав.",
     "This will allow the application to:": "Это позволит приложению:",
+    "This application is requesting sensitive permissions. Only continue if you trust it.": "Это приложение запрашивает конфиденциальные разрешения. Продолжайте, только если доверяете ему.",
     "This will permanently delete the OAuth application": "Это навсегда удалит приложение OAuth",
     "Unable to load authorization request": "Не удалось загрузить запрос авторизации",
     "Update application": "Обновить приложение",

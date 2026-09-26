@@ -7057,6 +7057,7 @@
     "This immediately invalidates the current client secret. Update the application with the new secret before it can authenticate again.": "This immediately invalidates the current client secret. Update the application with the new secret before it can authenticate again.",
     "This revokes access for {{name}} and signs you out. You can reconnect it later by authorizing again.": "This revokes access for {{name}} and signs you out. You can reconnect it later by authorizing again.",
     "This will allow the application to:": "This will allow the application to:",
+    "This application is requesting sensitive permissions. Only continue if you trust it.": "This application is requesting sensitive permissions. Only continue if you trust it.",
     "This will permanently delete the OAuth application": "This will permanently delete the OAuth application",
     "Unable to load authorization request": "Unable to load authorization request",
     "Update application": "Update application",

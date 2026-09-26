@@ -7057,6 +7057,7 @@
     "This immediately invalidates the current client secret. Update the application with the new secret before it can authenticate again.": "Cela invalide immédiatement le secret client actuel. Mettez à jour l'application avec le nouveau secret avant qu'elle puisse s'authentifier à nouveau.",
     "This revokes access for {{name}} and signs you out. You can reconnect it later by authorizing again.": "Cela révoque l'accès de {{name}} et vous déconnecte. Vous pourrez le reconnecter plus tard en l'autorisant à nouveau.",
     "This will allow the application to:": "Cela permettra à l'application de :",
+    "This application is requesting sensitive permissions. Only continue if you trust it.": "Cette application demande des autorisations sensibles. Ne continuez que si vous lui faites confiance.",
     "This will permanently delete the OAuth application": "Cela supprimera définitivement l'application OAuth",
     "Unable to load authorization request": "Impossible de charger la demande d'autorisation",
     "Update application": "Mettre à jour l'application",

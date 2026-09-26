@@ -7057,6 +7057,7 @@
     "This immediately invalidates the current client secret. Update the application with the new secret before it can authenticate again.": "現在のクライアントシークレットは直ちに無効になります。アプリが再び認証できるようになる前に、新しいシークレットでアプリを更新してください。",
     "This revokes access for {{name}} and signs you out. You can reconnect it later by authorizing again.": "この操作は {{name}} のアクセスを取り消し、あなたをサインアウトします。後で再度認可することで再接続できます。",
     "This will allow the application to:": "これにより、アプリは次のことができるようになります：",
+    "This application is requesting sensitive permissions. Only continue if you trust it.": "このアプリは機密性の高い権限を要求しています。信頼できる場合のみ続行してください。",
     "This will permanently delete the OAuth application": "この操作は OAuth アプリ",
     "Unable to load authorization request": "認可リクエストを読み込めませんでした",
     "Update application": "アプリを更新",

@@ -1,6 +1,7 @@
 package oauthserver
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,11 @@ import (
 
 // TokenType is the only token type new-api issues at the token endpoint.
 const TokenType = "Bearer"
+
+// ErrOAuthInsufficientScope indicates a valid, active access token that does not
+// carry a scope required for the requested action (RFC 6750 §3.1
+// insufficient_scope).
+var ErrOAuthInsufficientScope = errors.New("oauth access token is missing a required scope")
 
 // IssuedTokens is the result of a successful grant, shaped for the RFC 6749
 // token endpoint JSON response.
@@ -174,4 +180,28 @@ func UserInfo(accessToken string) (map[string]any, error) {
 	claims := ClaimsForScopes(user, record.GetScopes())
 	claims["sub"] = fmt.Sprintf("%d", record.UserId)
 	return claims, nil
+}
+
+// APIKeyGrant identifies the resource owner and client behind an access token
+// that has been authorized to create API keys.
+type APIKeyGrant struct {
+	UserId   int
+	ClientId string
+}
+
+// AuthorizeAPIKeyCreation validates a bearer access token for the API-key
+// creation capability. The token must resolve to an active grant (not revoked
+// or expired) that carries the api_keys scope; otherwise it returns
+// ErrOAuthInsufficientScope. The returned grant names the resource owner the
+// created key must belong to, so the caller never trusts a client-supplied user
+// identity.
+func AuthorizeAPIKeyCreation(accessToken string) (*APIKeyGrant, error) {
+	record, err := model.FindActiveOAuthTokenByAccessToken(accessToken)
+	if err != nil {
+		return nil, err
+	}
+	if !ContainsScope(record.GetScopes(), ScopeAPIKeys) {
+		return nil, ErrOAuthInsufficientScope
+	}
+	return &APIKeyGrant{UserId: record.UserId, ClientId: record.ClientId}, nil
 }

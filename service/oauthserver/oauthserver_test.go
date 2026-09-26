@@ -2,11 +2,14 @@ package oauthserver
 
 import (
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/model"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestValidChallengeMethod(t *testing.T) {
@@ -103,4 +106,83 @@ func TestMetadataDerivesEndpoints(t *testing.T) {
 	assert.Equal(t, []string{PKCEMethodS256}, meta["code_challenge_methods_supported"])
 	require.Contains(t, meta, "scopes_supported")
 	assert.Contains(t, meta["scopes_supported"], ScopeOpenID)
+}
+
+func TestAPIKeysScopeIsSensitiveActionOnly(t *testing.T) {
+	// The api_keys scope must be advertised as sensitive so the consent screen can
+	// highlight it, and it must NOT produce identity claims (it authorizes an
+	// action, not a userinfo field).
+	scope, ok := LookupScope(ScopeAPIKeys)
+	require.True(t, ok, "api_keys must be in the scope catalog")
+	assert.True(t, scope.Sensitive, "api_keys must be marked sensitive")
+	assert.False(t, scope.OIDC)
+
+	user := &model.User{Username: "carol", Email: "carol@example.com"}
+	assert.Empty(t, ClaimsForScopes(user, []string{ScopeAPIKeys}))
+}
+
+// setupOAuthTokenTestDB gives AuthorizeAPIKeyCreation an isolated in-memory DB
+// holding only the oauth_tokens table, restoring the process DB on cleanup.
+func setupOAuthTokenTestDB(t *testing.T) {
+	t.Helper()
+	previousDB := model.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	require.NoError(t, db.AutoMigrate(&model.OAuthToken{}))
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		_ = sqlDB.Close()
+	})
+}
+
+func insertOAuthAccessToken(t *testing.T, plain, scopes string, expiresAt int64, revoked bool) {
+	t.Helper()
+	rec := &model.OAuthToken{
+		GrantId:          "grant-" + plain,
+		ClientId:         "client-abc",
+		UserId:           42,
+		Scopes:           scopes,
+		AccessExpiresAt:  expiresAt,
+		RefreshExpiresAt: expiresAt,
+		Revoked:          revoked,
+	}
+	rec.SetAccessToken(plain)
+	require.NoError(t, rec.Insert())
+}
+
+func TestAuthorizeAPIKeyCreation(t *testing.T) {
+	setupOAuthTokenTestDB(t)
+	future := time.Now().Add(time.Hour).Unix()
+	past := time.Now().Add(-time.Hour).Unix()
+
+	insertOAuthAccessToken(t, "at_with_scope", "openid api_keys", future, false)
+	insertOAuthAccessToken(t, "at_no_scope", "openid profile", future, false)
+	insertOAuthAccessToken(t, "at_revoked", "api_keys", future, true)
+	insertOAuthAccessToken(t, "at_expired", "api_keys", past, false)
+
+	// Success: an active token carrying api_keys resolves to its owner and client.
+	grant, err := AuthorizeAPIKeyCreation("at_with_scope")
+	require.NoError(t, err)
+	require.NotNil(t, grant)
+	assert.Equal(t, 42, grant.UserId)
+	assert.Equal(t, "client-abc", grant.ClientId)
+
+	// A valid, active token WITHOUT the scope is rejected with insufficient_scope,
+	// never silently allowed (the scope is the only gate on key creation).
+	_, err = AuthorizeAPIKeyCreation("at_no_scope")
+	assert.ErrorIs(t, err, ErrOAuthInsufficientScope)
+
+	// Unknown, revoked, and expired tokens are all indistinguishable "not found".
+	_, err = AuthorizeAPIKeyCreation("at_unknown")
+	assert.ErrorIs(t, err, model.ErrOAuthTokenNotFound)
+	_, err = AuthorizeAPIKeyCreation("at_revoked")
+	assert.ErrorIs(t, err, model.ErrOAuthTokenNotFound)
+	_, err = AuthorizeAPIKeyCreation("at_expired")
+	assert.ErrorIs(t, err, model.ErrOAuthTokenNotFound)
+	_, err = AuthorizeAPIKeyCreation("")
+	assert.ErrorIs(t, err, model.ErrOAuthTokenNotFound)
 }

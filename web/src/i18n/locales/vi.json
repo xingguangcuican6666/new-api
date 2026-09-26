@@ -7057,6 +7057,7 @@
     "This immediately invalidates the current client secret. Update the application with the new secret before it can authenticate again.": "Thao tác này ngay lập tức vô hiệu hóa mã bí mật client hiện tại. Hãy cập nhật ứng dụng bằng mã bí mật mới trước khi nó có thể xác thực lại.",
     "This revokes access for {{name}} and signs you out. You can reconnect it later by authorizing again.": "Thao tác này thu hồi quyền truy cập của {{name}} và đăng xuất bạn. Bạn có thể kết nối lại sau bằng cách ủy quyền lần nữa.",
     "This will allow the application to:": "Điều này sẽ cho phép ứng dụng:",
+    "This application is requesting sensitive permissions. Only continue if you trust it.": "Ứng dụng này đang yêu cầu các quyền nhạy cảm. Chỉ tiếp tục nếu bạn tin tưởng ứng dụng này.",
     "This will permanently delete the OAuth application": "Thao tác này sẽ xóa vĩnh viễn ứng dụng OAuth",
     "Unable to load authorization request": "Không thể tải yêu cầu ủy quyền",
     "Update application": "Cập nhật ứng dụng",

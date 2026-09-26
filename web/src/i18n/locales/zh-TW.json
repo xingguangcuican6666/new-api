@@ -7057,6 +7057,7 @@
     "This immediately invalidates the current client secret. Update the application with the new secret before it can authenticate again.": "此操作會立即使目前的用戶端密鑰失效。請在應用程式能夠再次驗證之前，使用新密鑰更新該應用程式。",
     "This revokes access for {{name}} and signs you out. You can reconnect it later by authorizing again.": "此操作將撤銷 {{name}} 的存取權限並將你登出。你之後可以透過再次授權來重新連接。",
     "This will allow the application to:": "這將允許該應用程式：",
+    "This application is requesting sensitive permissions. Only continue if you trust it.": "此應用程式正在請求敏感權限。請僅在信任該應用程式時繼續。",
     "This will permanently delete the OAuth application": "此操作將永久刪除 OAuth 應用程式",
     "Unable to load authorization request": "無法載入授權請求",
     "Update application": "更新應用程式",

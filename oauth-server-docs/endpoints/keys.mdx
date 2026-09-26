@@ -1,0 +1,100 @@
+---
+title: "API Key 端点"
+description: "POST /oauth2/keys"
+---
+
+<Info>
+`POST /oauth2/keys` · `Content-Type: application/json`（可空）· 受限流保护（默认 20 次 / 20 分钟）
+</Info>
+
+为**访问令牌所属的用户**创建一个 New API API Key（中继令牌），并**一次性**返回其明文，供第三方应用在获得授权后代表该用户调用 New API。
+
+<Warning>
+本端点要求访问令牌携带 **`api_keys`** scope。它是**敏感操作授权**（授予"代表用户创建密钥"的动作，而非读取身份信息），需由管理员在客户端的允许 scope 中显式开启，并经用户在同意页确认。
+</Warning>
+
+## 认证
+
+用 Bearer 访问令牌认证（RFC 6750），与 [用户信息端点](/endpoints/userinfo#认证) 相同的两种方式；携带 JSON 请求体时请用 Authorization 头：
+
+<Tabs>
+  <Tab title="Authorization 头（推荐）">
+    ```bash
+    curl -X POST https://your-newapi.example.com/oauth2/keys \
+      -H "Authorization: Bearer at_xxxxxxxx" \
+      -H "Content-Type: application/json" \
+      -d '{"remain_quota": 500000, "expired_time": 0}'
+    ```
+  </Tab>
+  <Tab title="表单字段">
+    ```bash
+    curl -X POST https://your-newapi.example.com/oauth2/keys \
+      -d access_token=at_xxxxxxxx
+    ```
+    以表单字段传令牌时不便再带 JSON 体，各参数取默认值。
+  </Tab>
+</Tabs>
+
+令牌必须有效、未过期、未撤销，且其被授予的 scope 中包含 `api_keys`。
+
+## 参数
+
+请求体为 JSON，**全部可选**（允许空体）。客户端**无法**指定 Key 的值或归属用户——两者都由访问令牌决定。
+
+<ParamField body="remain_quota" type="integer">
+  Key 的额度（配额）。非负；当 `unlimited_quota` 为 `false` 时不得超过服务端上限。默认 `0`。
+</ParamField>
+<ParamField body="unlimited_quota" type="boolean">
+  是否为无限额度。默认 `false`；为 `true` 时跳过 `remain_quota` 上限校验。
+</ParamField>
+<ParamField body="expired_time" type="integer">
+  过期时间（Unix 秒）。`0` 或省略表示**永不过期**。
+</ParamField>
+
+<Note>
+服务端约束与后台"新建令牌"一致：额度受服务器上限约束，且每个用户的 Key 数量有上限。新建的 Key 以发起应用的名称命名，便于用户在"API 令牌"列表中识别与撤销。
+</Note>
+
+## 响应
+
+`201 Created`，带 `Cache-Control: no-store`。`key` 为可直接调用 API 的明文中继密钥，**仅此一次返回**：
+
+```json
+{
+  "key": "sk-xxxxxxxxxxxxxxxx",
+  "id": 42,
+  "name": "Acme 应用",
+  "unlimited_quota": false,
+  "remain_quota": 500000,
+  "expires_at": -1
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `key` | 明文 API Key（`sk-` 前缀），仅此一次返回 |
+| `id` | Key 的数值 ID |
+| `name` | Key 名称（取自发起应用名） |
+| `unlimited_quota` | 是否无限额度 |
+| `remain_quota` | 剩余额度 |
+| `expires_at` | 过期时间（Unix 秒）；`-1` 表示永不过期（请求 `expired_time` 为 `0` 或省略时即为此值） |
+
+<Warning>
+`key` 等同账号级凭据，请安全存储、切勿写入日志或前端可读位置。丢失后无法找回，只能让用户在"API 令牌"中删除后重建。
+</Warning>
+
+## 错误
+
+| HTTP | `error` | 场景 | 附加响应头 |
+| --- | --- | --- | --- |
+| 400 | `invalid_request` | 授权服务器未启用；请求体格式错误；`remain_quota` 为负或超过上限 | — |
+| 401 | `invalid_token` | 缺少 Bearer 令牌 | `WWW-Authenticate: Bearer realm="oauth"` |
+| 401 | `invalid_token` | 令牌无效 / 已过期 / 已撤销 | `WWW-Authenticate: Bearer error="invalid_token"` |
+| 403 | `insufficient_scope` | 令牌有效但未被授予 `api_keys` scope | `WWW-Authenticate: Bearer error="insufficient_scope", scope="api_keys"` |
+| 403 | `access_denied` | 用户的 API Key 数量已达上限 | — |
+| 500 | `server_error` | 创建过程中的内部错误 | — |
+
+<Tip>
+用户可随时在 New API 的"API 令牌"中删除应用创建的 Key，或在"已授权应用"中断开该应用。注意：断开应用会撤销其 OAuth 令牌，但**不会**自动删除已创建的 API Key，需用户自行删除。
+</Tip>
+

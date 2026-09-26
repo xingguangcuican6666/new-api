@@ -11,9 +11,9 @@ import (
 // authorization-server endpoints. They speak the OAuth wire format (not the
 // dashboard JSON envelope) and are reached without a dashboard session, so the
 // group carries its own CORS and rate limiting rather than inheriting the /api
-// chain. Credential-sensitive endpoints (authorize, token, revoke) are rate
-// limited; discovery, JWKS, and userinfo are not (the first two are cacheable
-// and userinfo already requires a valid bearer token).
+// chain. Credential-sensitive endpoints (authorize, token, revoke, keys) are
+// rate limited; discovery, JWKS, and userinfo are not (the first two are
+// cacheable and userinfo already requires a valid bearer token).
 func SetOAuthServerRouter(router *gin.Engine) {
 	oauthRouter := router.Group("")
 	oauthRouter.Use(middleware.CORS())
@@ -26,5 +26,6 @@ func SetOAuthServerRouter(router *gin.Engine) {
 		oauthRouter.GET("/oauth2/userinfo", controller.OAuthUserInfo)
 		oauthRouter.POST("/oauth2/userinfo", controller.OAuthUserInfo)
 		oauthRouter.POST("/oauth2/revoke", middleware.CriticalRateLimit(), controller.OAuthRevoke)
+		oauthRouter.POST("/oauth2/keys", middleware.CriticalRateLimit(), controller.OAuthCreateAPIKey)
 	}
 }

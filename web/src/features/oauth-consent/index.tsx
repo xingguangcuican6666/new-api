@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { AppWindow, Check, Loader2, X } from 'lucide-react'
+import { AlertTriangle, AppWindow, Check, Loader2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { handleServerError } from '@/lib/handle-server-error'
 import { requireServerSuccess } from '@/lib/server-error-message'
+import { cn } from '@/lib/utils'
 
 import {
   approveOAuthConsent,
@@ -196,6 +197,7 @@ export function OAuthConsent({ request }: { request: string }) {
   const client = context.client
   const showLogo = Boolean(client.logo) && isHttpUrl(client.logo)
   const showHomepage = Boolean(client.homepage) && isHttpUrl(client.homepage)
+  const hasSensitiveScope = context.scopes.some((scope) => scope.sensitive)
 
   return (
     <ConsentShell>
@@ -233,22 +235,50 @@ export function OAuthConsent({ request }: { request: string }) {
         <p className='text-sm font-medium'>
           {t('This will allow the application to:')}
         </p>
+        {hasSensitiveScope ? (
+          <div
+            role='alert'
+            className='flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100'
+          >
+            <AlertTriangle className='mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400' />
+            <p className='text-sm'>
+              {t(
+                'This application is requesting sensitive permissions. Only continue if you trust it.'
+              )}
+            </p>
+          </div>
+        ) : null}
         <ul className='space-y-2.5'>
-          {context.scopes.map((scope) => (
-            <li key={scope.name} className='flex items-start gap-2.5'>
-              <Check className='text-primary mt-0.5 size-4 shrink-0' />
-              <div className='min-w-0 space-y-0.5'>
-                <p className='text-sm font-medium'>
-                  {scope.title || scope.name}
-                </p>
-                {scope.description ? (
-                  <p className='text-muted-foreground text-xs'>
-                    {scope.description}
+          {context.scopes.map((scope) => {
+            const ScopeIcon = scope.sensitive ? AlertTriangle : Check
+            return (
+              <li key={scope.name} className='flex items-start gap-2.5'>
+                <ScopeIcon
+                  className={cn(
+                    'mt-0.5 size-4 shrink-0',
+                    scope.sensitive
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-primary'
+                  )}
+                />
+                <div className='min-w-0 space-y-0.5'>
+                  <p
+                    className={cn(
+                      'text-sm font-medium',
+                      scope.sensitive && 'text-amber-700 dark:text-amber-400'
+                    )}
+                  >
+                    {scope.title || scope.name}
                   </p>
-                ) : null}
-              </div>
-            </li>
-          ))}
+                  {scope.description ? (
+                    <p className='text-muted-foreground text-xs'>
+                      {scope.description}
+                    </p>
+                  ) : null}
+                </div>
+              </li>
+            )
+          })}
         </ul>
       </div>
 

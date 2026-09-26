@@ -1,0 +1,83 @@
+---
+title: "Scope 与 Claims"
+description: "支持的 scope 目录，以及每个 scope 映射出的 userinfo / ID Token claims"
+---
+
+New API 授权服务器支持以下 scope。scope 决定用户同意页展示的条目、`userinfo` 端点与 ID Token 中返回的 claims，以及可执行的敏感操作。
+
+## Scope 目录
+
+| scope | 标题 | 说明 | OIDC |
+| --- | --- | --- | --- |
+| `openid` | Sign you in | 验证身份并登录你；**颁发 ID Token 的前提** | ✅ |
+| `profile` | Basic profile | 用户名与显示名 | ✅ |
+| `email` | Email address | 邮箱地址 | ✅ |
+| `groups` | Groups and role | 账号所属分组与角色 | ❌ |
+| `api_keys` | Create API keys | 代表用户创建 API Key（**敏感**操作，不返回身份 claim） | ❌ |
+
+<Note>
+`openid` 是任何 OpenID Connect 流程的必要 scope：**只有授予了 `openid`，令牌端点才会返回 `id_token`**。
+</Note>
+
+Scope 字符串以空格分隔（如 `openid profile email`），解析时去重并保序。
+
+## Claims 映射
+
+每个 scope 会向 `userinfo` 响应与 ID Token 注入以下 claims：
+
+<AccordionGroup>
+  <Accordion title="openid → sub" icon="fingerprint">
+    `sub`：用户唯一标识（New API 用户 ID 的字符串形式，如 `"1024"`）。在 `userinfo` 响应中恒定返回；在 ID Token 中始终存在。
+  </Accordion>
+  <Accordion title="profile → preferred_username, name" icon="user">
+    - `preferred_username`：用户名（`username`）。
+    - `name`：显示名（`display_name`）；为空时回退为用户名。
+  </Accordion>
+  <Accordion title="email → email, email_verified" icon="envelope">
+    - `email`：邮箱地址（仅在非空时返回）。
+    - `email_verified`：`true`。New API 在绑定邮箱时即完成验证，因此已存储的非空邮箱按已验证处理。
+  </Accordion>
+  <Accordion title="groups → groups, role" icon="users">
+    - `groups`：账号所属分组数组（主分组 + 附加分组，去重并排序）。
+    - `role`：用户角色（整数）。
+  </Accordion>
+</AccordionGroup>
+
+<Info>
+分组与角色信息**仅在授予 `groups` scope 时**暴露，与同意页展示保持一致。`api_keys` 是操作型 scope，不注入任何 claim（其作用见 [API Key 端点](/endpoints/keys)）。
+</Info>
+
+## claims_supported
+
+发现文档中 `claims_supported` 声明服务器可能返回的全部 claims：
+
+```json
+[
+  "iss", "sub", "aud", "exp", "iat", "auth_time", "nonce",
+  "preferred_username", "name", "email", "email_verified", "groups", "role"
+]
+```
+
+其中 `iss`、`aud`、`exp`、`iat`、`auth_time`、`nonce` 是 ID Token 的协议级 claims（见 [令牌](/concepts/tokens)），其余为 scope 驱动的身份 claims。
+
+## 示例
+
+授予 `openid profile email groups` 时，`userinfo` 返回：
+
+```json
+{
+  "sub": "1024",
+  "preferred_username": "alice",
+  "name": "Alice Zhang",
+  "email": "alice@example.com",
+  "email_verified": true,
+  "groups": ["default", "vip"],
+  "role": 1
+}
+```
+
+只授予 `openid` 时，`userinfo` 仅返回 `sub`：
+
+```json
+{ "sub": "1024" }
+```

@@ -16,19 +16,31 @@ type Scope struct {
 	Description string `json:"description"`
 	// OIDC marks scopes that map to OpenID Connect standard claims.
 	OIDC bool `json:"oidc"`
+	// Sensitive marks scopes that grant an action beyond reading identity claims
+	// (for example, minting API keys). The consent screen highlights these so the
+	// user notices the elevated request before approving.
+	Sensitive bool `json:"sensitive"`
 }
 
 // ScopeOpenID is required for any OpenID Connect flow (issues an ID token).
 const ScopeOpenID = "openid"
 
+// ScopeAPIKeys authorizes a client to create API keys (relay tokens) on the
+// resource owner's behalf and receive their value, so the client can call the
+// API as the user. It is an action authorization, not an identity claim, so it
+// is marked Sensitive and implies no ClaimsForScopes entry.
+const ScopeAPIKeys = "api_keys"
+
 // supportedScopes is the authorization server's scope catalog. Adding a scope
 // here makes it available for clients to allow and for users to grant; wire any
-// new claims it implies into ClaimsForScopes.
+// new claims it implies into ClaimsForScopes, and mark it Sensitive when it
+// grants an action rather than exposing an identity claim.
 var supportedScopes = []Scope{
 	{Name: ScopeOpenID, Title: "Sign you in", Description: "Verify your identity and sign you in", OIDC: true},
 	{Name: "profile", Title: "Basic profile", Description: "Your username and display name", OIDC: true},
 	{Name: "email", Title: "Email address", Description: "Your email address", OIDC: true},
 	{Name: "groups", Title: "Groups and role", Description: "Your account groups and role", OIDC: false},
+	{Name: ScopeAPIKeys, Title: "Create API keys", Description: "Create API keys on your account and use them to call the API on your behalf", OIDC: false, Sensitive: true},
 }
 
 var scopeIndex = func() map[string]Scope {

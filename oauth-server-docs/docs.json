@@ -1,0 +1,78 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "New API OAuth 服务",
+  "description": "New API 作为 OAuth 2.0 / OpenID Connect 身份提供方（IdP）的对外协议文档",
+  "colors": {
+    "primary": "#2F6FED",
+    "light": "#5B8DEF",
+    "dark": "#1B4DB1"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "指南",
+        "groups": [
+          {
+            "group": "开始使用",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "核心概念",
+            "pages": [
+              "concepts/clients",
+              "concepts/scopes-and-claims",
+              "concepts/tokens",
+              "concepts/pkce"
+            ]
+          },
+          {
+            "group": "授权流程",
+            "pages": ["flows/authorization-code"]
+          },
+          {
+            "group": "参考",
+            "pages": ["errors", "security", "configuration"]
+          }
+        ]
+      },
+      {
+        "tab": "API 参考",
+        "groups": [
+          {
+            "group": "发现与密钥",
+            "pages": ["endpoints/discovery", "endpoints/jwks"]
+          },
+          {
+            "group": "OAuth 端点",
+            "pages": [
+              "endpoints/authorize",
+              "endpoints/token",
+              "endpoints/userinfo",
+              "endpoints/revoke",
+              "endpoints/keys"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "官方文档",
+        "href": "https://docs.newapi.ai/"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/QuantumNous/new-api"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/QuantumNous/new-api"
+    }
+  }
+}

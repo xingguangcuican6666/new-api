@@ -35,6 +35,9 @@ export interface OAuthConsentScope {
   name: string
   title: string
   description: string
+  // Sensitive scopes grant an action beyond reading identity (e.g. minting API
+  // keys); the consent screen highlights them so the user notices before approving.
+  sensitive?: boolean
 }
 
 export interface OAuthConsentContext {

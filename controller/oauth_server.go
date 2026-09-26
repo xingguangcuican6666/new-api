@@ -2,15 +2,19 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service/oauthserver"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
@@ -234,7 +238,7 @@ func GetOAuthConsentContext(c *gin.Context) {
 		if !ok {
 			continue
 		}
-		scopes = append(scopes, gin.H{"name": scope.Name, "title": scope.Title, "description": scope.Description})
+		scopes = append(scopes, gin.H{"name": scope.Name, "title": scope.Title, "description": scope.Description, "sensitive": scope.Sensitive})
 	}
 
 	common.ApiSuccess(c, gin.H{
@@ -529,6 +533,128 @@ func bearerAccessToken(c *gin.Context) string {
 		return strings.TrimSpace(header[7:])
 	}
 	return strings.TrimSpace(c.PostForm("access_token"))
+}
+
+// oauthCreateAPIKeyRequest is the optional body of POST /oauth2/keys. Every
+// field is optional and bounded server-side; the client can influence only the
+// spending limits and expiry, never the key value or the owning user.
+type oauthCreateAPIKeyRequest struct {
+	RemainQuota    int   `json:"remain_quota"`
+	UnlimitedQuota bool  `json:"unlimited_quota"`
+	ExpiredTime    int64 `json:"expired_time"`
+}
+
+// OAuthCreateAPIKey handles POST /oauth2/keys. A third-party application holding
+// an access token granted the api_keys scope creates a new-api API key (relay
+// token) that belongs to the token's resource owner and receives its value once.
+// This mirrors the dashboard's AddToken, except the owning user is taken from the
+// validated access token (never a request field) and the same server-side quota
+// and per-user count limits apply.
+func OAuthCreateAPIKey(c *gin.Context) {
+	if !oauthServerEnabled() {
+		writeOAuthError(c, http.StatusBadRequest, "invalid_request", "the OAuth authorization server is not enabled")
+		return
+	}
+	accessToken := bearerAccessToken(c)
+	if accessToken == "" {
+		c.Header("WWW-Authenticate", `Bearer realm="oauth"`)
+		writeOAuthError(c, http.StatusUnauthorized, "invalid_token", "a bearer access token is required")
+		return
+	}
+	grant, err := oauthserver.AuthorizeAPIKeyCreation(accessToken)
+	if err != nil {
+		if errors.Is(err, oauthserver.ErrOAuthInsufficientScope) {
+			c.Header("WWW-Authenticate", `Bearer error="insufficient_scope", scope="api_keys"`)
+			writeOAuthError(c, http.StatusForbidden, "insufficient_scope", "the api_keys scope is required to create API keys")
+			return
+		}
+		c.Header("WWW-Authenticate", `Bearer error="invalid_token"`)
+		writeOAuthError(c, http.StatusUnauthorized, "invalid_token", "the access token is invalid or has expired")
+		return
+	}
+	var req oauthCreateAPIKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeOAuthError(c, http.StatusBadRequest, "invalid_request", "the request body is invalid")
+		return
+	}
+	if !req.UnlimitedQuota {
+		if req.RemainQuota < 0 {
+			writeOAuthError(c, http.StatusBadRequest, "invalid_request", "remain_quota must not be negative")
+			return
+		}
+		if maxQuota := maxTokenQuota(); req.RemainQuota > maxQuota {
+			writeOAuthError(c, http.StatusBadRequest, "invalid_request", fmt.Sprintf("remain_quota exceeds the maximum of %d", maxQuota))
+			return
+		}
+	}
+
+	maxTokens := operation_setting.GetMaxUserTokens()
+	count, err := model.CountUserTokens(grant.UserId)
+	if err != nil {
+		common.SysError("oauth create api key: count tokens failed: " + err.Error())
+		writeOAuthError(c, http.StatusInternalServerError, "server_error", "failed to create the API key")
+		return
+	}
+	if int(count) >= maxTokens {
+		writeOAuthError(c, http.StatusForbidden, "access_denied", "the account has reached its maximum number of API keys")
+		return
+	}
+	// Name the key after the requesting application so the user can recognize and
+	// revoke it from their key list; fall back to a generic label. Keep it within
+	// the same 50-byte bound the dashboard enforces, truncating on a UTF-8 boundary.
+	name := "OAuth application"
+	if client, cErr := model.GetOAuthClientByClientId(grant.ClientId); cErr == nil && strings.TrimSpace(client.Name) != "" {
+		name = strings.TrimSpace(client.Name)
+	}
+	if len(name) > 50 {
+		name = name[:50]
+		for len(name) > 0 && !utf8.ValidString(name) {
+			name = name[:len(name)-1]
+		}
+	}
+
+	expiredTime := req.ExpiredTime
+	if expiredTime == 0 {
+		// A zero expiry would place the key at the Unix epoch (already expired);
+		// treat an omitted expiry as "never", matching the token model default.
+		expiredTime = -1
+	}
+
+	key, err := common.GenerateKey()
+	if err != nil {
+		common.SysError("oauth create api key: generate key failed: " + err.Error())
+		writeOAuthError(c, http.StatusInternalServerError, "server_error", "failed to create the API key")
+		return
+	}
+	now := common.GetTimestamp()
+	token := model.Token{
+		UserId:         grant.UserId,
+		Name:           name,
+		Key:            key,
+		CreatedTime:    now,
+		AccessedTime:   now,
+		ExpiredTime:    expiredTime,
+		RemainQuota:    req.RemainQuota,
+		UnlimitedQuota: req.UnlimitedQuota,
+	}
+	if err := token.Insert(); err != nil {
+		common.SysError("oauth create api key: insert failed: " + err.Error())
+		writeOAuthError(c, http.StatusInternalServerError, "server_error", "failed to create the API key")
+		return
+	}
+	// Audit context only: identify who minted a key for whom. Never the key value.
+	common.SysLog(fmt.Sprintf("oauth: client %s created API key id=%d for user %d", grant.ClientId, token.Id, grant.UserId))
+
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.JSON(http.StatusCreated, gin.H{
+		"key":             "sk-" + token.Key,
+		"id":              token.Id,
+		"name":            token.Name,
+		"unlimited_quota": token.UnlimitedQuota,
+		"remain_quota":    token.RemainQuota,
+		"expires_at":      token.ExpiredTime,
+	})
 }
 
 // OAuthDiscovery serves GET /.well-known/openid-configuration (OpenID Connect
