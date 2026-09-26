@@ -636,6 +636,7 @@ func OAuthCreateAPIKey(c *gin.Context) {
 		ExpiredTime:    expiredTime,
 		RemainQuota:    req.RemainQuota,
 		UnlimitedQuota: req.UnlimitedQuota,
+		OAuthClientId:  grant.ClientId,
 	}
 	if err := token.Insert(); err != nil {
 		common.SysError("oauth create api key: insert failed: " + err.Error())

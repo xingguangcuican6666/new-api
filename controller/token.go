@@ -127,15 +127,31 @@ func setTokenAutoGroups(c *gin.Context, token *model.Token, groups []string) boo
 	return true
 }
 
+// parseTokenOrigin reads the optional origin filter from the query string,
+// mapping it to a whitelisted model constant. Any unrecognized value yields an
+// empty origin (no filter), so a malformed query never leaks the whole list nor
+// errors.
+func parseTokenOrigin(c *gin.Context) string {
+	switch c.Query("origin") {
+	case model.TokenOriginUser:
+		return model.TokenOriginUser
+	case model.TokenOriginApp:
+		return model.TokenOriginApp
+	default:
+		return ""
+	}
+}
+
 func GetAllTokens(c *gin.Context) {
 	userId := c.GetInt("id")
+	origin := parseTokenOrigin(c)
 	pageInfo := common.GetPageQuery(c)
-	tokens, err := model.GetAllUserTokens(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	tokens, err := model.GetAllUserTokens(userId, origin, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	total, _ := model.CountUserTokens(userId)
+	total, _ := model.CountUserTokensByOrigin(userId, origin)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(buildMaskedTokenResponses(tokens))
 	common.ApiSuccess(c, pageInfo)
@@ -145,10 +161,11 @@ func SearchTokens(c *gin.Context) {
 	userId := c.GetInt("id")
 	keyword := c.Query("keyword")
 	token := c.Query("token")
+	origin := parseTokenOrigin(c)
 
 	pageInfo := common.GetPageQuery(c)
 
-	tokens, total, err := model.SearchUserTokens(userId, keyword, token, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	tokens, total, err := model.SearchUserTokens(userId, keyword, token, origin, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return

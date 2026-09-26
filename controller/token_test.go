@@ -38,10 +38,11 @@ type tokenPageResponse struct {
 }
 
 type tokenResponseItem struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Key    string `json:"key"`
-	Status int    `json:"status"`
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Key           string `json:"key"`
+	Status        int    `json:"status"`
+	OAuthClientId string `json:"oauth_client_id"`
 }
 
 type tokenKeyResponse struct {
@@ -891,4 +892,205 @@ func verifyAPITokenAudit(t *testing.T) {
 		require.NoError(t, model.DB.Model(&model.Token{}).Where("name = ?", "audit-down").Count(&count).Error)
 		assert.EqualValues(t, 1, count)
 	})
+}
+
+func setupOAuthKeyTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := openTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Token{}, &model.User{}, &model.OAuthClient{}, &model.OAuthUserGrant{}, &model.OAuthToken{}))
+	return db
+}
+
+// seedAppToken creates a relay key minted by an OAuth application (carrying an
+// oauth_client_id), mirroring what OAuthCreateAPIKey persists.
+func seedAppToken(t *testing.T, db *gorm.DB, userID int, name string, rawKey string, clientId string) *model.Token {
+	t.Helper()
+	token := seedToken(t, db, userID, name, rawKey)
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", token.Id).Update("oauth_client_id", clientId).Error)
+	token.OAuthClientId = clientId
+	return token
+}
+
+func TestGetAllTokensSeparatesByOrigin(t *testing.T) {
+	db := setupOAuthKeyTestDB(t)
+	seedToken(t, db, 1, "user-key", "user1111user2222")
+	appTok := seedAppToken(t, db, 1, "app-key", "app11111app22222", "cli_alpha")
+	seedToken(t, db, 2, "other-user-key", "othr1111othr2222")
+
+	decodePage := func(target string) tokenPageResponse {
+		ctx, recorder := newAuthenticatedContext(t, http.MethodGet, target, nil, 1)
+		GetAllTokens(ctx)
+		response := decodeAPIResponse(t, recorder)
+		require.True(t, response.Success, response.Message)
+		var page tokenPageResponse
+		require.NoError(t, common.Unmarshal(response.Data, &page))
+		return page
+	}
+
+	require.Len(t, decodePage("/api/token/?p=1&size=10").Items, 2)
+
+	appOnly := decodePage("/api/token/?origin=app&p=1&size=10")
+	require.Len(t, appOnly.Items, 1)
+	assert.Equal(t, "app-key", appOnly.Items[0].Name)
+	assert.Equal(t, "cli_alpha", appOnly.Items[0].OAuthClientId)
+	assert.Equal(t, appTok.GetMaskedKey(), appOnly.Items[0].Key)
+
+	userOnly := decodePage("/api/token/?origin=user&p=1&size=10")
+	require.Len(t, userOnly.Items, 1)
+	assert.Equal(t, "user-key", userOnly.Items[0].Name)
+	assert.Empty(t, userOnly.Items[0].OAuthClientId)
+
+	// An unrecognized origin falls back to no filter rather than leaking or erroring.
+	require.Len(t, decodePage("/api/token/?origin=bogus&p=1&size=10").Items, 2)
+}
+
+func TestSearchTokensFiltersByOrigin(t *testing.T) {
+	db := setupOAuthKeyTestDB(t)
+	seedToken(t, db, 1, "shared-name", "user1111user2222")
+	seedAppToken(t, db, 1, "shared-name", "app11111app22222", "cli_alpha")
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/api/token/search?keyword=shared-name&origin=app&p=1&size=10", nil, 1)
+	SearchTokens(ctx)
+	response := decodeAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	var page tokenPageResponse
+	require.NoError(t, common.Unmarshal(response.Data, &page))
+	require.Len(t, page.Items, 1)
+	assert.Equal(t, "cli_alpha", page.Items[0].OAuthClientId)
+}
+
+func TestDeleteOAuthUserGrantDeletesOnlyScopedAppKeys(t *testing.T) {
+	db := setupOAuthKeyTestDB(t)
+	revoked := seedAppToken(t, db, 1, "u1-clientA", "a1a1a1a1a1a1a1a1", "cli_A")
+	keepClientB := seedAppToken(t, db, 1, "u1-clientB", "b1b1b1b1b1b1b1b1", "cli_B")
+	keepDirect := seedToken(t, db, 1, "u1-direct", "d1d1d1d1d1d1d1d1")
+	keepOtherUser := seedAppToken(t, db, 2, "u2-clientA", "a2a2a2a2a2a2a2a2", "cli_A")
+
+	require.NoError(t, model.UpsertOAuthUserGrant(1, "cli_A", []string{"openid", "api_keys"}))
+	require.NoError(t, model.DeleteOAuthUserGrant(1, "cli_A"))
+
+	exists := func(id int) bool {
+		var count int64
+		require.NoError(t, db.Model(&model.Token{}).Where("id = ?", id).Count(&count).Error)
+		return count == 1
+	}
+	assert.False(t, exists(revoked.Id), "the disconnected app's key for this user must be deleted by the gateway")
+	assert.True(t, exists(keepClientB.Id), "another application's key must survive")
+	assert.True(t, exists(keepDirect.Id), "the user's own directly-created key must survive")
+	assert.True(t, exists(keepOtherUser.Id), "the same client's key for a different user must survive")
+
+	grant, err := model.GetOAuthUserGrant(1, "cli_A")
+	require.NoError(t, err)
+	assert.Nil(t, grant, "the consent grant itself must be removed")
+}
+
+func TestDeleteOAuthClientDeletesAllAppKeysForClient(t *testing.T) {
+	db := setupOAuthKeyTestDB(t)
+	client := &model.OAuthClient{
+		ClientId:     "cli_A",
+		Name:         "App A",
+		RedirectUris: `["https://a.example.com/callback"]`,
+		Scopes:       "openid profile email",
+		Status:       model.OAuthClientStatusEnabled,
+		OwnerUserId:  1,
+	}
+	require.NoError(t, client.Insert())
+
+	u1KeyA := seedAppToken(t, db, 1, "u1-clientA", "a1a1a1a1a1a1a1a1", "cli_A")
+	u2KeyA := seedAppToken(t, db, 2, "u2-clientA", "a2a2a2a2a2a2a2a2", "cli_A")
+	keepClientB := seedAppToken(t, db, 1, "u1-clientB", "b1b1b1b1b1b1b1b1", "cli_B")
+	keepDirect := seedToken(t, db, 1, "u1-direct", "d1d1d1d1d1d1d1d1")
+
+	require.NoError(t, model.DeleteOAuthClient(client.Id))
+
+	remaining := func(id int) int64 {
+		var count int64
+		require.NoError(t, db.Model(&model.Token{}).Where("id = ?", id).Count(&count).Error)
+		return count
+	}
+	assert.EqualValues(t, 0, remaining(u1KeyA.Id))
+	assert.EqualValues(t, 0, remaining(u2KeyA.Id))
+	assert.EqualValues(t, 1, remaining(keepClientB.Id))
+	assert.EqualValues(t, 1, remaining(keepDirect.Id))
+
+	_, err := model.GetOAuthClientById(client.Id)
+	assert.ErrorIs(t, err, model.ErrOAuthClientNotFound)
+}
+
+func TestOAuthClientCreationRequiresPermission(t *testing.T) {
+	db := setupOAuthKeyTestDB(t)
+	makeUser := func(username string, role int, canCreate bool) int {
+		// A distinct AffCode per user avoids colliding on the aff_code unique index,
+		// which the empty-string default would otherwise violate for the second row.
+		user := &model.User{Username: username, AffCode: username, Password: "password-hash", Role: role, Status: common.UserStatusEnabled, CanCreateOAuthApp: canCreate}
+		require.NoError(t, db.Create(user).Error)
+		return user.Id
+	}
+	adminID := makeUser("admin-user", common.RoleAdminUser, false)
+	granteeID := makeUser("common-granted", common.RoleCommonUser, true)
+	plainID := makeUser("common-plain", common.RoleCommonUser, false)
+
+	attemptCreate := func(userID, role int) bool {
+		body := oauthClientRequest{
+			Name:         "Example App",
+			RedirectUris: []string{"https://app.example.com/callback"},
+			Scopes:       []string{"openid", "profile", "email"},
+		}
+		ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/oauth-server/clients", body, userID)
+		ctx.Set("role", role)
+		CreateOAuthClient(ctx)
+		return decodeAPIResponse(t, recorder).Success
+	}
+
+	assert.False(t, attemptCreate(plainID, common.RoleCommonUser), "a common user without the flag must be refused")
+	assert.True(t, attemptCreate(granteeID, common.RoleCommonUser), "the admin-granted flag must allow creation")
+	assert.True(t, attemptCreate(adminID, common.RoleAdminUser), "an admin may always create regardless of the flag")
+}
+
+func TestOAuthClientAccessIsOwnerScoped(t *testing.T) {
+	setupOAuthKeyTestDB(t)
+	insertClient := func(clientId, name string, owner int) *model.OAuthClient {
+		client := &model.OAuthClient{ClientId: clientId, Name: name, RedirectUris: `["https://x.example.com/callback"]`, Scopes: "openid", Status: model.OAuthClientStatusEnabled, OwnerUserId: owner}
+		require.NoError(t, client.Insert())
+		return client
+	}
+	ownerID, strangerID, adminID := 11, 22, 33
+	ownedClient := insertClient("cli_owned", "Owned App", ownerID)
+	insertClient("cli_other", "Other App", 99)
+
+	listAs := func(userID, role int) []oauthClientResponse {
+		ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/api/oauth-server/clients", nil, userID)
+		ctx.Set("role", role)
+		ListOAuthClients(ctx)
+		response := decodeAPIResponse(t, recorder)
+		require.True(t, response.Success, response.Message)
+		var clients []oauthClientResponse
+		require.NoError(t, common.Unmarshal(response.Data, &clients))
+		return clients
+	}
+
+	// View isolation: a common user's list shows only clients they own.
+	ownerClients := listAs(ownerID, common.RoleCommonUser)
+	require.Len(t, ownerClients, 1)
+	assert.Equal(t, "cli_owned", ownerClients[0].ClientId)
+	// An admin sees every registered client.
+	assert.Len(t, listAs(adminID, common.RoleAdminUser), 2)
+
+	getAs := func(userID, role int) tokenAPIResponse {
+		ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/api/oauth-server/clients/"+strconv.Itoa(ownedClient.Id), nil, userID)
+		ctx.Set("role", role)
+		ctx.Params = gin.Params{{Key: "id", Value: strconv.Itoa(ownedClient.Id)}}
+		GetOAuthClient(ctx)
+		return decodeAPIResponse(t, recorder)
+	}
+
+	// IDOR: a non-owner common user gets not-found, never a distinct signal that
+	// the client exists.
+	stranger := getAs(strangerID, common.RoleCommonUser)
+	assert.False(t, stranger.Success)
+	assert.Equal(t, model.ErrOAuthClientNotFound.Error(), stranger.Message)
+	// The owner and an admin can both read it.
+	assert.True(t, getAs(ownerID, common.RoleCommonUser).Success)
+	assert.True(t, getAs(adminID, common.RoleAdminUser).Success)
 }

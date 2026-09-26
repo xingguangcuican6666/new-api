@@ -21,7 +21,11 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { resolveSidebarView } from '@/components/layout/lib/sidebar-view-registry'
-import type { NavGroup, ResolvedSidebarView } from '@/components/layout/types'
+import type {
+  NavGroup,
+  NavItem,
+  ResolvedSidebarView,
+} from '@/components/layout/types'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -47,22 +51,36 @@ const ROOT_VIEW_KEY = '__root'
 export function useSidebarView(): ResolvedSidebarView {
   const { t } = useTranslation()
   const pathname = useLocation({ select: (l) => l.pathname })
-  const userRole = useAuthStore((s) => s.auth.user?.role)
+  const user = useAuthStore((s) => s.auth.user)
   const rootSidebarData = useSidebarData()
   const configFilteredRoot = useSidebarConfig(rootSidebarData.navGroups)
 
   const rootNavGroups = useMemo<NavGroup[]>(() => {
-    const role = userRole ?? ROLE.GUEST
+    const role = user?.role ?? ROLE.GUEST
     const isAdmin = role >= ROLE.ADMIN
+
+    // An item is visible by role threshold, or by an explicit capability grant
+    // (e.g. a common user allowed to create OAuth applications).
+    const isItemVisible = (item: NavItem) =>
+      item.requiredRole === undefined ||
+      role >= item.requiredRole ||
+      item.requiredCapability?.(user) === true
+
     return configFilteredRoot
-      .filter((group) => (group.id === 'admin' ? isAdmin : true))
       .map((group) => {
-        const items = group.items.filter(
-          (item) => item.requiredRole === undefined || role >= item.requiredRole
-        )
+        // The admin group is admin-only, except that a capability grant can
+        // surface individual items within it to a non-admin user.
+        if (group.id === 'admin' && !isAdmin) {
+          const items = group.items.filter(
+            (item) => item.requiredCapability?.(user) === true
+          )
+          return items.length > 0 ? { ...group, items } : null
+        }
+        const items = group.items.filter(isItemVisible)
         return items.length === group.items.length ? group : { ...group, items }
       })
-  }, [configFilteredRoot, userRole])
+      .filter((group): group is NavGroup => group !== null)
+  }, [configFilteredRoot, user])
 
   const view = resolveSidebarView(pathname)
 

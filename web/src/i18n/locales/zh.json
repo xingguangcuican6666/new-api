@@ -3768,6 +3768,8 @@
     "Next page": "下一页",
     "Next reset": "下一次重置",
     "Nginx mode (behind a reverse proxy)": "Nginx 模式（部署在反向代理之后）",
+    "Disable all rate limiting": "关闭全部速率限制",
+    "Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.": "适用于经过两三层代理、所有客户端在 Nginx 模式后仍共用同一地址的部署的总开关。开启后关闭全部请求速率限制——既包括按地址计数的限制（全局 Web/API、关键操作、邮件验证、上传/下载、任务产物），也包括 Nginx 模式仍保留的按用户限制（模型请求、敏感操作与搜索限制）。并发上限与账号防爆破锁定（两步验证、邮箱绑定、会话）仍然生效。除非代理已对流量限速，否则请保持关闭；等同于 DISABLE_RATE_LIMIT 环境变量。",
     "No": "否",
     "No About Content Set": "未设置关于内容",
     "No Active": "无生效",
@@ -7063,6 +7065,11 @@
     "Update application": "更新应用",
     "Update how this application appears and what it may request.": "更新此应用的显示方式及其可请求的内容。",
     "Users are only redirected to an exact match of one of these URIs.": "用户只会被重定向到与这些 URI 之一完全匹配的地址。",
-    "Where users return after authorizing and what the application may access": "用户授权后返回的地址，以及应用可以访问的内容"
+    "Where users return after authorizing and what the application may access": "用户授权后返回的地址，以及应用可以访问的内容",
+    "Filter by source": "按来源筛选",
+    "Allow creating OAuth applications": "允许创建 OAuth 应用",
+    "Let this user register their own OAuth applications. Admins can always create applications.": "允许该用户注册自己的 OAuth 应用。管理员始终可以创建应用。",
+    "Application disconnected and its API keys removed": "已断开应用连接并删除其 API 密钥",
+    "Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again.": "断开 {{name}} 会立即撤销其访问权限，并删除它为你创建的所有 API 密钥。这些密钥由网关自行删除，而非应用。之后你可以通过重新授权再次连接。"
   }
 }

@@ -263,6 +263,24 @@ var (
 	// the same name. DISABLE_IP_RATE_LIMIT is an accepted alias for operators
 	// who configured the earlier name.
 	NginxMode = false
+
+	// DisableRateLimit is the master switch that turns request-rate limiting
+	// off entirely. While it is on, every rate limiter is a no-op: the IP-keyed
+	// ones that NginxMode already neutralizes (global web/API, critical, email
+	// verification, upload/download, task-artifact invalid-token) and — unlike
+	// NginxMode — the ones keyed by authenticated user ID as well (model
+	// request, user-critical, search). It exists for deployments behind two or
+	// three proxy layers, where NginxMode alone still leaves the per-user
+	// limiters biting because every client arrives as the same address.
+	//
+	// It deliberately does NOT touch concurrency admission caps or account
+	// brute-force lockouts (2FA, email binding, session issuance): a shared
+	// proxy address does not weaken those per-account controls, and disabling
+	// them would drop protection the proxy cannot provide. Set it with the
+	// DISABLE_RATE_LIMIT environment variable or the root setting of the same
+	// name; a saved root setting overrides the bootstrap default once options
+	// load from the database.
+	DisableRateLimit = false
 )
 
 var RateLimitKeyExpirationDuration = 20 * time.Minute

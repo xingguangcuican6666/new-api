@@ -260,3 +260,44 @@ func TestIPRateLimitDisabledPassthrough(t *testing.T) {
 	assert.Equal(t, http.StatusTooManyRequests, performRateLimitRequest(router2, "/user", "10.0.0.1:12345").Code,
 		"user-keyed limiter must stay active when the master IP switch is on")
 }
+
+func TestDisableRateLimitMasterSwitchPassthrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	_, _ = useRateLimitMiniRedis(t)
+	// Keep NginxMode off so the passthrough is attributable to the master switch
+	// alone, including the user-keyed limiter that NginxMode deliberately leaves
+	// enforcing.
+	prevNginx := common.NginxMode
+	prevDisable := common.DisableRateLimit
+	common.NginxMode = false
+	common.DisableRateLimit = true
+	t.Cleanup(func() {
+		common.NginxMode = prevNginx
+		common.DisableRateLimit = prevDisable
+	})
+
+	router := gin.New()
+	require.NoError(t, router.SetTrustedProxies(nil))
+	router.GET("/ip", rateLimitFactory(1, 10, "MASTER-IP"), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	router.GET("/email", EmailVerificationRateLimit(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	router.GET("/user",
+		func(c *gin.Context) { c.Set("id", 99) },
+		userRateLimitFactory(1, 20, "MASTER-USER"),
+		func(c *gin.Context) { c.Status(http.StatusNoContent) },
+	)
+
+	addr := "203.0.113.90:12345"
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/ip", addr).Code)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/ip", addr).Code,
+		"IP-keyed limiter must pass through under the master switch despite the cap")
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/email", addr).Code)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/email", addr).Code)
+	// Unlike NginxMode, the master switch also disables the user-keyed limiter.
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/user", addr).Code)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/user", addr).Code,
+		"user-keyed limiter must pass through when the master switch is on")
+}

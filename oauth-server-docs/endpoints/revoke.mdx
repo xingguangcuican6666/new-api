@@ -44,5 +44,5 @@ curl -X POST https://your-newapi.example.com/oauth2/revoke \
 | 500 | `server_error` | 撤销时的内部错误 |
 
 <Tip>
-撤销会连带该授权族的另一半令牌一起失效（Access + Refresh）。若要"下线"某用户对某应用的全部授权，用户也可在 New API 的"已授权应用"中断开该应用。
+撤销会连带该授权族的另一半令牌一起失效（Access + Refresh）。若要"下线"某用户对某应用的全部授权，用户也可在 New API 的"已授权应用"中断开该应用——此操作还会删除该应用为该用户创建的全部 API Key。
 </Tip>

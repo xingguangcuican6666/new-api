@@ -79,7 +79,7 @@ export function AuthorizedApplicationsCard() {
     },
     onSuccess: async () => {
       setRevokeTarget(null)
-      toast.success(t('Application disconnected'))
+      toast.success(t('Application disconnected and its API keys removed'))
       await queryClient.invalidateQueries({ queryKey: authorizationsQueryKey })
     },
     onError: (error: Error) => handleServerError(error),
@@ -166,7 +166,7 @@ export function AuthorizedApplicationsCard() {
         }}
         title={t('Disconnect application?')}
         desc={t(
-          'This revokes access for {{name}} and signs you out. You can reconnect it later by authorizing again.',
+          'Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again.',
           { name: revokeTarget?.client.name ?? '' }
         )}
         confirmText={t('Disconnect')}

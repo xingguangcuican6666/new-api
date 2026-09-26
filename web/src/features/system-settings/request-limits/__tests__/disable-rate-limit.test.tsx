@@ -39,6 +39,8 @@ const defaultValues = {
   DisableRateLimit: false,
 }
 
+const TOGGLE_NAME = 'Disable all rate limiting'
+
 afterEach(() => {
   cleanup()
   clients.forEach((client) => client.clear())
@@ -65,9 +67,7 @@ async function renderSection(overrides: Partial<typeof defaultValues> = {}) {
           actionsContainer={actionsContainer}
           suppressSectionHeader={false}
         >
-          <RateLimitSection
-            defaultValues={{ ...defaultValues, ...overrides }}
-          />
+          <RateLimitSection defaultValues={{ ...defaultValues, ...overrides }} />
         </SettingsPageProvider>
       </>
     )
@@ -77,13 +77,11 @@ async function renderSection(overrides: Partial<typeof defaultValues> = {}) {
       <Fixture />
     </QueryClientProvider>
   )
-  return screen.findByRole('switch', {
-    name: 'Nginx mode (behind a reverse proxy)',
-  })
+  return screen.findByRole('switch', { name: TOGGLE_NAME })
 }
 
-describe('nginx mode setting', () => {
-  it('saves the enforcement key so the toggle is not inert', async () => {
+describe('disable rate limiting master switch', () => {
+  it('saves the DisableRateLimit key when turned on', async () => {
     const toggle = await renderSection()
     const user = userEvent.setup()
 
@@ -91,11 +89,9 @@ describe('nginx mode setting', () => {
     await user.click(toggle)
     await user.click(screen.getByRole('button', { name: 'Save rate limits' }))
 
-    // The retired key name was never read by the backend, so the assertion
-    // that matters is which key reaches the option API.
     await waitFor(() =>
       expect(api.put).toHaveBeenCalledWith('/api/option/', {
-        key: 'NginxMode',
+        key: 'DisableRateLimit',
         value: true,
       })
     )
@@ -103,7 +99,7 @@ describe('nginx mode setting', () => {
   })
 
   it('reflects a stored setting and can switch it back off', async () => {
-    const toggle = await renderSection({ NginxMode: true })
+    const toggle = await renderSection({ DisableRateLimit: true })
     const user = userEvent.setup()
 
     expect(toggle).toBeChecked()
@@ -112,17 +108,16 @@ describe('nginx mode setting', () => {
 
     await waitFor(() =>
       expect(api.put).toHaveBeenCalledWith('/api/option/', {
-        key: 'NginxMode',
+        key: 'DisableRateLimit',
         value: false,
       })
     )
   })
 
   it('does not submit when nothing changed', async () => {
-    const toggle = await renderSection()
+    await renderSection()
     const user = userEvent.setup()
 
-    expect(toggle).not.toBeChecked()
     await user.click(screen.getByRole('button', { name: 'Save rate limits' }))
     await waitFor(() => expect(api.put).not.toHaveBeenCalled())
   })

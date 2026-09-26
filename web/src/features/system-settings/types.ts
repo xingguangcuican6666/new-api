@@ -429,6 +429,7 @@ export type SecuritySettings = {
   ModelRequestRateLimitDurationMinutes: number
   ModelRequestRateLimitGroup: string
   NginxMode: boolean
+  DisableRateLimit: boolean
   CheckSensitiveEnabled: boolean
   CheckSensitiveOnPromptEnabled: boolean
   SensitiveWords: string

@@ -107,7 +107,7 @@ func redisFixedWindowTake(ctx context.Context, key string, maxRequestNum int, du
 }
 
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
-	if common.NginxMode {
+	if common.NginxMode || common.DisableRateLimit {
 		c.Next()
 		return
 	}
@@ -129,7 +129,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 }
 
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
-	if common.NginxMode {
+	if common.NginxMode || common.DisableRateLimit {
 		c.Next()
 		return
 	}
@@ -211,6 +211,10 @@ func UploadRateLimit() func(c *gin.Context) {
 func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
 	if common.RedisEnabled {
 		return func(c *gin.Context) {
+			if common.DisableRateLimit {
+				c.Next()
+				return
+			}
 			userID := c.GetInt("id")
 			if userID == 0 {
 				c.Status(http.StatusUnauthorized)
@@ -223,6 +227,10 @@ func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c
 	// It's safe to call multi times.
 	inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
 	return func(c *gin.Context) {
+		if common.DisableRateLimit {
+			c.Next()
+			return
+		}
 		userID := c.GetInt("id")
 		if userID == 0 {
 			c.Status(http.StatusUnauthorized)

@@ -3768,6 +3768,8 @@
     "Next page": "Trang tiếp theo",
     "Next reset": "Lần đặt lại tiếp theo",
     "Nginx mode (behind a reverse proxy)": "Chế độ Nginx (đứng sau reverse proxy)",
+    "Disable all rate limiting": "Tắt toàn bộ giới hạn tần suất",
+    "Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.": "Công tắc tổng cho các triển khai nằm sau hai hoặc ba lớp proxy, nơi mọi client vẫn dùng chung một địa chỉ ngay cả sau chế độ Nginx. Khi bật, nó tắt toàn bộ giới hạn tần suất yêu cầu — cả các giới hạn theo địa chỉ (web/API toàn cục, thao tác quan trọng, xác minh email, tải lên/tải xuống, sản phẩm tác vụ) lẫn các giới hạn theo người dùng mà chế độ Nginx vẫn giữ hoạt động (yêu cầu mô hình, thao tác nhạy cảm và tìm kiếm). Giới hạn đồng thời và khóa chống dò mật khẩu tài khoản (2FA, liên kết email, phiên) vẫn có hiệu lực. Hãy để tắt trừ khi proxy đã giới hạn tần suất lưu lượng; tương đương biến môi trường DISABLE_RATE_LIMIT.",
     "No": "Không",
     "No About Content Set": "Chưa đặt nội dung Giới thiệu",
     "No Active": "Không hoạt động",
@@ -7063,6 +7065,11 @@
     "Update application": "Cập nhật ứng dụng",
     "Update how this application appears and what it may request.": "Cập nhật cách ứng dụng này hiển thị và những gì nó có thể yêu cầu.",
     "Users are only redirected to an exact match of one of these URIs.": "Người dùng chỉ được chuyển hướng đến một địa chỉ khớp chính xác với một trong các URI này.",
-    "Where users return after authorizing and what the application may access": "Nơi người dùng quay lại sau khi ủy quyền và những gì ứng dụng có thể truy cập"
+    "Where users return after authorizing and what the application may access": "Nơi người dùng quay lại sau khi ủy quyền và những gì ứng dụng có thể truy cập",
+    "Filter by source": "Lọc theo nguồn",
+    "Allow creating OAuth applications": "Cho phép tạo ứng dụng OAuth",
+    "Let this user register their own OAuth applications. Admins can always create applications.": "Cho phép người dùng này đăng ký ứng dụng OAuth của riêng họ. Quản trị viên luôn có thể tạo ứng dụng.",
+    "Application disconnected and its API keys removed": "Đã ngắt kết nối ứng dụng và xóa các khóa API của nó",
+    "Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again.": "Ngắt kết nối {{name}} sẽ ngay lập tức thu hồi quyền truy cập của nó và xóa mọi khóa API mà nó đã tạo cho bạn. Cổng (gateway) tự xóa các khóa đó, không phải ứng dụng. Bạn có thể kết nối lại sau bằng cách cấp quyền lại."
   }
 }

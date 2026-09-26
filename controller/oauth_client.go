@@ -95,9 +95,38 @@ func applyOAuthClientRequest(client *model.OAuthClient, req *oauthClientRequest)
 	return nil
 }
 
-// ListOAuthClients backs GET /api/oauth-server/clients (RootAuth).
+// callerIsOAuthAdmin reports whether the request is made by an admin or root
+// user, who may manage every OAuth application regardless of ownership.
+func callerIsOAuthAdmin(c *gin.Context) bool {
+	return c.GetInt("role") >= common.RoleAdminUser
+}
+
+// loadManageableOAuthClient loads a client for a management action and enforces
+// ownership for non-admin callers. A non-owner referencing someone else's client
+// gets ErrOAuthClientNotFound rather than a distinct 403, so client existence is
+// never leaked to unauthorized users (IDOR protection). Admins and root manage
+// any client.
+func loadManageableOAuthClient(c *gin.Context, id int) (*model.OAuthClient, error) {
+	client, err := model.GetOAuthClientById(id)
+	if err != nil {
+		return nil, err
+	}
+	if !callerIsOAuthAdmin(c) && client.OwnerUserId != c.GetInt("id") {
+		return nil, model.ErrOAuthClientNotFound
+	}
+	return client, nil
+}
+
+// ListOAuthClients backs GET /api/oauth-server/clients (UserAuth). Admins see
+// every registered client; a common user sees only the clients they own.
 func ListOAuthClients(c *gin.Context) {
-	clients, err := model.GetAllOAuthClients()
+	var clients []*model.OAuthClient
+	var err error
+	if callerIsOAuthAdmin(c) {
+		clients, err = model.GetAllOAuthClients()
+	} else {
+		clients, err = model.GetOAuthClientsByOwner(c.GetInt("id"))
+	}
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -109,14 +138,15 @@ func ListOAuthClients(c *gin.Context) {
 	common.ApiSuccess(c, out)
 }
 
-// GetOAuthClient backs GET /api/oauth-server/clients/:id (RootAuth).
+// GetOAuthClient backs GET /api/oauth-server/clients/:id (UserAuth); non-admins
+// may only read a client they own.
 func GetOAuthClient(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		common.ApiErrorMsg(c, "invalid client id")
 		return
 	}
-	client, err := model.GetOAuthClientById(id)
+	client, err := loadManageableOAuthClient(c, id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -124,10 +154,22 @@ func GetOAuthClient(c *gin.Context) {
 	common.ApiSuccess(c, newOAuthClientResponse(client))
 }
 
-// CreateOAuthClient backs POST /api/oauth-server/clients (RootAuth). It mints a
+// CreateOAuthClient backs POST /api/oauth-server/clients (UserAuth). It mints a
 // client_id and, for confidential clients, a client secret returned exactly once
-// in plaintext (only its hash is stored).
+// in plaintext (only its hash is stored). Admins and root may always create
+// applications; a common user needs the admin-granted CanCreateOAuthApp flag.
 func CreateOAuthClient(c *gin.Context) {
+	if !callerIsOAuthAdmin(c) {
+		allowed, err := model.IsUserAllowedToCreateOAuthApp(c.GetInt("id"))
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if !allowed {
+			common.ApiErrorMsg(c, "您没有创建 OAuth 应用的权限")
+			return
+		}
+	}
 	var req oauthClientRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		common.ApiErrorMsg(c, "invalid request body")
@@ -161,16 +203,17 @@ func CreateOAuthClient(c *gin.Context) {
 	})
 }
 
-// UpdateOAuthClient backs PUT /api/oauth-server/clients/:id (RootAuth). The
+// UpdateOAuthClient backs PUT /api/oauth-server/clients/:id (UserAuth). The
 // stored secret is preserved (the loaded client carries its hash); switching a
 // client to public clears the secret so a stale one can never be replayed.
+// Non-admins may only update a client they own.
 func UpdateOAuthClient(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		common.ApiErrorMsg(c, "invalid client id")
 		return
 	}
-	client, err := model.GetOAuthClientById(id)
+	client, err := loadManageableOAuthClient(c, id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -196,15 +239,16 @@ func UpdateOAuthClient(c *gin.Context) {
 }
 
 // RotateOAuthClientSecret backs POST /api/oauth-server/clients/:id/rotate-secret
-// (RootAuth), issuing a fresh secret and returning it once. Existing tokens keep
-// working; only future client authentication requires the new secret.
+// (UserAuth), issuing a fresh secret and returning it once. Existing tokens keep
+// working; only future client authentication requires the new secret. Non-admins
+// may only rotate a secret for a client they own.
 func RotateOAuthClientSecret(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		common.ApiErrorMsg(c, "invalid client id")
 		return
 	}
-	client, err := model.GetOAuthClientById(id)
+	client, err := loadManageableOAuthClient(c, id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -229,12 +273,17 @@ func RotateOAuthClientSecret(c *gin.Context) {
 	})
 }
 
-// DeleteOAuthClient backs DELETE /api/oauth-server/clients/:id (RootAuth),
-// cascading to the client's tokens and grants.
+// DeleteOAuthClient backs DELETE /api/oauth-server/clients/:id (UserAuth),
+// cascading to the client's OAuth tokens, consent grants and app-minted relay
+// keys. Non-admins may only delete a client they own.
 func DeleteOAuthClient(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		common.ApiErrorMsg(c, "invalid client id")
+		return
+	}
+	if _, err := loadManageableOAuthClient(c, id); err != nil {
+		common.ApiError(c, err)
 		return
 	}
 	if err := model.DeleteOAuthClient(id); err != nil {
@@ -244,7 +293,7 @@ func DeleteOAuthClient(c *gin.Context) {
 	common.ApiSuccess(c, nil)
 }
 
-// GetOAuthServerScopes backs GET /api/oauth-server/scopes (RootAuth), returning
+// GetOAuthServerScopes backs GET /api/oauth-server/scopes (UserAuth), returning
 // the scope catalog so the client editor can offer the grantable scopes.
 func GetOAuthServerScopes(c *gin.Context) {
 	common.ApiSuccess(c, oauthserver.SupportedScopes())

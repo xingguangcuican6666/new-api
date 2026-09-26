@@ -31,6 +31,7 @@ const defaultSecuritySettings: SecuritySettings = {
   ModelRequestRateLimitDurationMinutes: 1,
   ModelRequestRateLimitGroup: '',
   NginxMode: false,
+  DisableRateLimit: false,
   CheckSensitiveEnabled: false,
   CheckSensitiveOnPromptEnabled: false,
   SensitiveWords: '',

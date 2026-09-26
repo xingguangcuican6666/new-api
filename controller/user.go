@@ -538,6 +538,7 @@ func buildSelfUserData(user *model.User) map[string]any {
 		"linux_do_id":          user.LinuxDOId,
 		"setting":              user.Setting,
 		"stripe_customer":      user.StripeCustomer,
+		"can_create_oauth_app": user.CanCreateOAuthApp,
 		"pending_ban_reason":   user.PendingBanReason,
 		"pending_ban_deadline": user.PendingBanDeadline,
 		"sidebar_modules":      userSetting.SidebarModules, // 正确提取sidebar_modules字段
@@ -710,6 +711,13 @@ func UpdateUser(c *gin.Context) {
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
 		if err := updatedUser.EditWithTx(tx, updatePassword); err != nil {
+			return err
+		}
+		// Admin-only permission flag, written with an explicit column Update so a
+		// false value is persisted (revoking the grant). Kept out of the shared
+		// EditWithTx whitelist so it can never be set on the self-update path.
+		if err := tx.Model(&model.User{}).Where("id = ?", updatedUser.Id).
+			Update("can_create_oauth_app", updatedUser.CanCreateOAuthApp).Error; err != nil {
 			return err
 		}
 		touched, err := updateAdminPermissionsForUserInTx(c, tx, updatedUser.Id, originUser.Role, updatedUser.AdminPermissions)
@@ -1019,10 +1027,11 @@ func CreateUser(c *gin.Context) {
 	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-		Role:        user.Role, // 保持管理员设置的角色
+		Username:          user.Username,
+		Password:          user.Password,
+		DisplayName:       user.DisplayName,
+		Role:              user.Role, // 保持管理员设置的角色
+		CanCreateOAuthApp: user.CanCreateOAuthApp,
 	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {

@@ -16,8 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type LinkProps } from '@tanstack/react-router'
-import { type TFunction } from 'i18next'
+import type { LinkProps } from '@tanstack/react-router'
+import type { TFunction } from 'i18next'
+
+import type { AuthUser } from '@/stores/auth-store'
 
 /**
  * Base navigation item type
@@ -34,6 +36,12 @@ type BaseNavItem = {
    * `useSidebarView`). Route-level guards still enforce access independently.
    */
   requiredRole?: number
+  /**
+   * Optional capability predicate evaluated against the current user. When set,
+   * the item is shown to a user below `requiredRole` if this returns true (e.g.
+   * a per-user grant). Route-level guards still enforce access independently.
+   */
+  requiredCapability?: (user: AuthUser | null) => boolean
 }
 
 /**

@@ -79,6 +79,7 @@ const createRateLimitSchema = (t: (key: string) => string) =>
         message: t('Invalid JSON format or values out of allowed range'),
       }),
     NginxMode: z.boolean(),
+    DisableRateLimit: z.boolean(),
   })
 
 type RateLimitFormValues = z.infer<ReturnType<typeof createRateLimitSchema>>
@@ -159,6 +160,29 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                   <FormDescription>
                     {t(
                       'Turn on when every request reaches this service through one reverse proxy, such as nginx in a Docker deployment. All users then share a single address, so IP-keyed limits block legitimate users instead of abusers. The global web/API, critical, email-verification, upload/download and task-artifact limits stop counting, and rate limiting by address becomes the proxy\'s job. Per-user limits stay active. Equivalent to the NGINX_MODE environment variable.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='DisableRateLimit'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Disable all rate limiting')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.'
                     )}
                   </FormDescription>
                 </SettingsSwitchContent>

@@ -46,6 +46,9 @@ export const apiKeySchema = z.object({
   model_limits_enabled: z.boolean(),
   model_limits: z.string().nullish().default(''),
   allow_ips: z.string().nullish().default(''),
+  // Empty for user-created keys; set to the minting OAuth client_id for keys an
+  // authorized third-party application created on the user's behalf.
+  oauth_client_id: z.string().nullish().default(''),
 })
 
 export type ApiKey = z.infer<typeof apiKeySchema>
@@ -60,9 +63,16 @@ export interface ApiResponse<T = unknown> {
   data?: T
 }
 
+/**
+ * Origin filter for the API keys list: `user` for keys the user created
+ * directly, `app` for keys minted by an authorized OAuth application.
+ */
+export type ApiKeyOrigin = 'user' | 'app'
+
 export interface GetApiKeysParams {
   p?: number
   size?: number
+  origin?: ApiKeyOrigin
 }
 
 export interface GetApiKeysResponse {
@@ -81,6 +91,7 @@ export interface SearchApiKeysParams {
   token?: string
   p?: number
   size?: number
+  origin?: ApiKeyOrigin
 }
 
 export interface ApiKeyFormData {

@@ -3768,6 +3768,8 @@
     "Next page": "Следующая страница",
     "Next reset": "Следующий сброс",
     "Nginx mode (behind a reverse proxy)": "Режим Nginx (за обратным прокси)",
+    "Disable all rate limiting": "Отключить все ограничения частоты запросов",
+    "Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.": "Главный переключатель для развёртываний за двумя-тремя слоями прокси, где после режима Nginx все клиенты по-прежнему используют один адрес. Он отключает все ограничения частоты запросов — как ограничения по адресу (глобальные web/API, критические операции, проверка электронной почты, загрузка/скачивание, артефакты задач), так и ограничения по пользователю, которые режим Nginx оставляет активными (запросы к моделям, чувствительные действия и поиск). Ограничения параллелизма и блокировки учётных записей от перебора (2FA, привязка почты, сессии) продолжают действовать. Оставьте его выключенным, если прокси ещё не ограничивает трафик; эквивалент переменной окружения DISABLE_RATE_LIMIT.",
     "No": "Нет",
     "No About Content Set": "Содержимое раздела \"О нас\" не установлено",
     "No Active": "Нет активных",
@@ -7063,6 +7065,11 @@
     "Update application": "Обновить приложение",
     "Update how this application appears and what it may request.": "Измените то, как выглядит это приложение и что оно может запрашивать.",
     "Users are only redirected to an exact match of one of these URIs.": "Пользователи перенаправляются только на точное совпадение с одним из этих URI.",
-    "Where users return after authorizing and what the application may access": "Куда пользователи возвращаются после авторизации и к чему приложение может получить доступ"
+    "Where users return after authorizing and what the application may access": "Куда пользователи возвращаются после авторизации и к чему приложение может получить доступ",
+    "Filter by source": "Фильтр по источнику",
+    "Allow creating OAuth applications": "Разрешить создание приложений OAuth",
+    "Let this user register their own OAuth applications. Admins can always create applications.": "Разрешает этому пользователю регистрировать собственные приложения OAuth. Администраторы всегда могут создавать приложения.",
+    "Application disconnected and its API keys removed": "Приложение отключено, а его API-ключи удалены",
+    "Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again.": "Отключение {{name}} немедленно отзывает доступ приложения и удаляет все API-ключи, созданные им для вас. Эти ключи удаляет сам шлюз, а не приложение. Позже вы сможете снова подключить его, выдав авторизацию заново."
   }
 }

@@ -3768,6 +3768,8 @@
     "Next page": "次のページ",
     "Next reset": "次のリセット",
     "Nginx mode (behind a reverse proxy)": "Nginx モード（リバースプロキシ配下）",
+    "Disable all rate limiting": "すべてのレート制限を無効化",
+    "Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.": "Nginx モードの後でもすべてのクライアントが同一アドレスを共有する、2～3 層のプロキシ配下のデプロイ向けのマスタースイッチです。オンにすると、すべてのリクエストレート制限を無効化します。アドレス単位の制限（グローバル Web/API、重要操作、メール認証、アップロード/ダウンロード、タスク成果物）と、Nginx モードでも残るユーザー単位の制限（モデルリクエスト、機微操作、検索）の両方が対象です。同時実行数の上限とアカウントの総当たり対策ロック（2 段階認証、メール連携、セッション）は引き続き有効です。プロキシが既にトラフィックをレート制限している場合を除き、オフのままにしてください。DISABLE_RATE_LIMIT 環境変数と同等です。",
     "No": "いいえ",
     "No About Content Set": "概要コンテンツが設定されていません",
     "No Active": "アクティブなし",
@@ -7063,6 +7065,11 @@
     "Update application": "アプリを更新",
     "Update how this application appears and what it may request.": "このアプリの表示方法とリクエストできる内容を更新します。",
     "Users are only redirected to an exact match of one of these URIs.": "ユーザーは、これらの URI のいずれかと完全に一致する場合にのみリダイレクトされます。",
-    "Where users return after authorizing and what the application may access": "ユーザーが認可後に戻る場所と、アプリがアクセスできる内容"
+    "Where users return after authorizing and what the application may access": "ユーザーが認可後に戻る場所と、アプリがアクセスできる内容",
+    "Filter by source": "ソースで絞り込む",
+    "Allow creating OAuth applications": "OAuth アプリケーションの作成を許可",
+    "Let this user register their own OAuth applications. Admins can always create applications.": "このユーザーが自分の OAuth アプリケーションを登録できるようにします。管理者は常にアプリケーションを作成できます。",
+    "Application disconnected and its API keys removed": "アプリケーションの接続を解除し、その API キーを削除しました",
+    "Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again.": "{{name}} の接続を解除すると、そのアクセス権が直ちに取り消され、アプリがあなたのために作成した API キーがすべて削除されます。これらのキーはアプリケーションではなくゲートウェイ自身が削除します。後で再度承認すれば、また接続できます。"
   }
 }

@@ -113,6 +113,24 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         meta: { mobileTitle: true },
       },
       {
+        id: 'origin',
+        header: t('Source'),
+        cell: ({ row }) => {
+          const isApp = Boolean(row.original.oauth_client_id)
+          return (
+            <StatusBadge
+              label={isApp ? t('Application') : t('Personal')}
+              variant={isApp ? 'info' : 'neutral'}
+              copyable={false}
+              className='-ml-1.5'
+            />
+          )
+        },
+        enableSorting: false,
+        size: 120,
+        meta: { mobileHidden: true },
+      },
+      {
         accessorKey: 'status',
         header: t('Status'),
         cell: ({ row }) => {

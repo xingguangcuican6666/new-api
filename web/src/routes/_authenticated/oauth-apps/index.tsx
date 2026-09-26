@@ -26,7 +26,10 @@ export const Route = createFileRoute('/_authenticated/oauth-apps/')({
   beforeLoad: () => {
     const { auth } = useAuthStore.getState()
 
-    if (auth.user?.role !== ROLE.SUPER_ADMIN) {
+    // Admins/root manage every application; a common user reaches this page
+    // only when an admin has granted the create-OAuth-app permission.
+    const role = auth.user?.role ?? ROLE.GUEST
+    if (role < ROLE.ADMIN && !auth.user?.can_create_oauth_app) {
       throw redirect({
         to: '/403',
       })

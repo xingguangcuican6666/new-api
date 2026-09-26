@@ -3768,6 +3768,8 @@
     "Next page": "Page suivante",
     "Next reset": "Prochaine réinitialisation",
     "Nginx mode (behind a reverse proxy)": "Mode Nginx (derrière un reverse proxy)",
+    "Disable all rate limiting": "Désactiver toutes les limites de débit",
+    "Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.": "Interrupteur principal pour les déploiements derrière deux ou trois couches de proxy, où chaque client partage encore une seule adresse même après le mode Nginx. Il désactive toute limitation du débit des requêtes — à la fois les limites par adresse (web/API global, opérations critiques, vérification e-mail, téléversement/téléchargement, artefacts de tâches) et les limites par utilisateur que le mode Nginx laisse actives (requêtes de modèle, actions sensibles et recherche). Les plafonds de concurrence et les verrouillages anti-force brute des comptes (2FA, liaison e-mail, sessions) restent en vigueur. Laissez-le désactivé sauf si un proxy limite déjà le débit du trafic ; équivalent à la variable d'environnement DISABLE_RATE_LIMIT.",
     "No": "Non",
     "No About Content Set": "Aucun contenu « À propos » défini",
     "No Active": "Aucun actif",
@@ -7063,6 +7065,11 @@
     "Update application": "Mettre à jour l'application",
     "Update how this application appears and what it may request.": "Mettez à jour l'apparence de cette application et ce qu'elle peut demander.",
     "Users are only redirected to an exact match of one of these URIs.": "Les utilisateurs ne sont redirigés que vers une correspondance exacte de l'une de ces URI.",
-    "Where users return after authorizing and what the application may access": "Où les utilisateurs reviennent après l'autorisation et ce à quoi l'application peut accéder"
+    "Where users return after authorizing and what the application may access": "Où les utilisateurs reviennent après l'autorisation et ce à quoi l'application peut accéder",
+    "Filter by source": "Filtrer par source",
+    "Allow creating OAuth applications": "Autoriser la création d’applications OAuth",
+    "Let this user register their own OAuth applications. Admins can always create applications.": "Permet à cet utilisateur d’enregistrer ses propres applications OAuth. Les administrateurs peuvent toujours créer des applications.",
+    "Application disconnected and its API keys removed": "Application déconnectée et ses clés API supprimées",
+    "Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again.": "Déconnecter {{name}} révoque immédiatement son accès et supprime toutes les clés API qu’elle a créées pour vous. C’est la passerelle qui supprime ces clés, pas l’application. Vous pourrez la reconnecter plus tard en l’autorisant à nouveau."
   }
 }

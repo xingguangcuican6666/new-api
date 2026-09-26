@@ -80,44 +80,50 @@ func resolveUserSortOptions(sortOptions []UserSortOptions) UserSortOptions {
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
-	Id                   int                        `json:"id"`
-	Username             string                     `json:"username" gorm:"unique;index" validate:"max=20"`
-	Password             string                     `json:"password" gorm:"not null;" validate:"min=8,max=128"`
-	HasPassword          bool                       `json:"-" gorm:"-:all"`
-	OriginalPassword     string                     `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
-	DisplayName          string                     `json:"display_name" gorm:"index" validate:"max=20"`
-	Role                 int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
-	Status               int                        `json:"status" gorm:"type:int;default:1"` // enabled, disabled
-	Email                string                     `json:"email" gorm:"index" validate:"max=50"`
-	GitHubId             string                     `json:"github_id" gorm:"column:github_id;index"`
-	DiscordId            string                     `json:"discord_id" gorm:"column:discord_id;index"`
-	OidcId               string                     `json:"oidc_id" gorm:"column:oidc_id;index"`
-	WeChatId             string                     `json:"wechat_id" gorm:"column:wechat_id;index"`
-	TelegramId           string                     `json:"telegram_id" gorm:"column:telegram_id;index"`
-	VerificationCode     string                     `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
-	AccessToken          *string                    `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	AccessTokenCreatedAt *int64                     `json:"-" gorm:"type:bigint;column:access_token_created_at"`
-	Quota                int                        `json:"quota" gorm:"type:int;default:0"`
-	UsedQuota            int                        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
-	RequestCount         int                        `json:"request_count" gorm:"type:int;default:0;"`               // request number
-	Group                string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
-	Groups               string                     `json:"groups" gorm:"type:varchar(255);column:groups"` // comma-separated additional groups beyond Group, see GetExtraGroups
-	AffCode              string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
-	AffCount             int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
-	AffQuota             int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
-	AffHistoryQuota      int                        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
-	InviterId            int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
-	DeletedAt            gorm.DeletedAt             `gorm:"index"`
-	LinuxDOId            string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
-	Setting              string                     `json:"setting" gorm:"type:text;column:setting"`
-	Remark               string                     `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
-	StripeCustomer       string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
-	PendingBanReason     string                     `json:"pending_ban_reason" gorm:"type:varchar(255);column:pending_ban_reason"`
-	PendingBanDeadline   int64                      `json:"pending_ban_deadline" gorm:"bigint;default:0;column:pending_ban_deadline;index"`
-	CreatedAt            int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
-	LastLoginAt          int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
-	AuthVersion          int64                      `json:"-" gorm:"type:bigint;not null;default:1;column:auth_version"`
-	AdminPermissions     map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
+	Id                   int            `json:"id"`
+	Username             string         `json:"username" gorm:"unique;index" validate:"max=20"`
+	Password             string         `json:"password" gorm:"not null;" validate:"min=8,max=128"`
+	HasPassword          bool           `json:"-" gorm:"-:all"`
+	OriginalPassword     string         `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
+	DisplayName          string         `json:"display_name" gorm:"index" validate:"max=20"`
+	Role                 int            `json:"role" gorm:"type:int;default:1"`   // admin, common
+	Status               int            `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	Email                string         `json:"email" gorm:"index" validate:"max=50"`
+	GitHubId             string         `json:"github_id" gorm:"column:github_id;index"`
+	DiscordId            string         `json:"discord_id" gorm:"column:discord_id;index"`
+	OidcId               string         `json:"oidc_id" gorm:"column:oidc_id;index"`
+	WeChatId             string         `json:"wechat_id" gorm:"column:wechat_id;index"`
+	TelegramId           string         `json:"telegram_id" gorm:"column:telegram_id;index"`
+	VerificationCode     string         `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
+	AccessToken          *string        `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
+	AccessTokenCreatedAt *int64         `json:"-" gorm:"type:bigint;column:access_token_created_at"`
+	Quota                int            `json:"quota" gorm:"type:int;default:0"`
+	UsedQuota            int            `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
+	RequestCount         int            `json:"request_count" gorm:"type:int;default:0;"`               // request number
+	Group                string         `json:"group" gorm:"type:varchar(64);default:'default'"`
+	Groups               string         `json:"groups" gorm:"type:varchar(255);column:groups"` // comma-separated additional groups beyond Group, see GetExtraGroups
+	AffCode              string         `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
+	AffCount             int            `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
+	AffQuota             int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
+	AffHistoryQuota      int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
+	InviterId            int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	DeletedAt            gorm.DeletedAt `gorm:"index"`
+	LinuxDOId            string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	Setting              string         `json:"setting" gorm:"type:text;column:setting"`
+	Remark               string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
+	// CanCreateOAuthApp lets an admin grant a common user permission to register
+	// OAuth applications (new-api as an identity provider). Admins and root can
+	// always create applications regardless of this flag; it governs common users
+	// only. No default tag: the Go zero value (false) covers new inserts and
+	// existing rows scan NULL as false.
+	CanCreateOAuthApp  bool                       `json:"can_create_oauth_app" gorm:"column:can_create_oauth_app"`
+	StripeCustomer     string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
+	PendingBanReason   string                     `json:"pending_ban_reason" gorm:"type:varchar(255);column:pending_ban_reason"`
+	PendingBanDeadline int64                      `json:"pending_ban_deadline" gorm:"bigint;default:0;column:pending_ban_deadline;index"`
+	CreatedAt          int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
+	LastLoginAt        int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	AuthVersion        int64                      `json:"-" gorm:"type:bigint;not null;default:1;column:auth_version"`
+	AdminPermissions   map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -599,12 +605,27 @@ func GetSelfUserById(id int) (*User, error) {
 		"github_id", "discord_id", "oidc_id", "wechat_id", "telegram_id",
 		"group", "quota", "used_quota", "request_count", "aff_code", "aff_count",
 		"aff_quota", "aff_history", "inviter_id", "linux_do_id", "setting",
-		"stripe_customer", "auth_version",
+		"stripe_customer", "auth_version", "can_create_oauth_app",
 		"pending_ban_reason", "pending_ban_deadline",
 		"CASE WHEN password <> '' THEN 1 ELSE 0 END AS has_password",
 	}).First(&profile, "id = ?", id).Error
 	profile.User.HasPassword = profile.HasPassword
 	return &profile.User, err
+}
+
+// IsUserAllowedToCreateOAuthApp reports whether a common user has been granted
+// permission to register OAuth applications. Admins/root are not gated by this
+// flag and callers should short-circuit them before calling this.
+func IsUserAllowedToCreateOAuthApp(userId int) (bool, error) {
+	if userId == 0 {
+		return false, errors.New("id 为空！")
+	}
+	var user User
+	err := DB.Model(&User{}).Select("can_create_oauth_app").First(&user, "id = ?", userId).Error
+	if err != nil {
+		return false, err
+	}
+	return user.CanCreateOAuthApp, nil
 }
 
 func GetUserIdByAffCode(affCode string) (int, error) {

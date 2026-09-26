@@ -54,6 +54,8 @@ export interface AuthUser {
   setting?: Record<string, unknown> | string
   stripe_customer?: string
   sidebar_modules?: string
+  /** Admin-granted permission for a common user to create OAuth applications. */
+  can_create_oauth_app?: boolean
   permissions?: UserPermissions
 }
 

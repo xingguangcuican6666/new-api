@@ -12,24 +12,29 @@ import (
 )
 
 type Token struct {
-	Id                 int            `json:"id"`
-	UserId             int            `json:"user_id" gorm:"index"`
-	Key                string         `json:"key" gorm:"type:varchar(128);uniqueIndex"`
-	Status             int            `json:"status" gorm:"default:1"`
-	Name               string         `json:"name" gorm:"index" `
-	CreatedTime        int64          `json:"created_time" gorm:"bigint"`
-	AccessedTime       int64          `json:"accessed_time" gorm:"bigint"`
-	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
-	RemainQuota        int            `json:"remain_quota" gorm:"default:0"`
-	UnlimitedQuota     bool           `json:"unlimited_quota"`
-	ModelLimitsEnabled bool           `json:"model_limits_enabled"`
-	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
-	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
-	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
-	Group              string         `json:"group" gorm:"default:''"`
-	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
-	AutoGroups         string         `json:"-" gorm:"type:text"`
-	DeletedAt          gorm.DeletedAt `gorm:"index"`
+	Id                 int     `json:"id"`
+	UserId             int     `json:"user_id" gorm:"index"`
+	Key                string  `json:"key" gorm:"type:varchar(128);uniqueIndex"`
+	Status             int     `json:"status" gorm:"default:1"`
+	Name               string  `json:"name" gorm:"index" `
+	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
+	AccessedTime       int64   `json:"accessed_time" gorm:"bigint"`
+	ExpiredTime        int64   `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
+	RemainQuota        int     `json:"remain_quota" gorm:"default:0"`
+	UnlimitedQuota     bool    `json:"unlimited_quota"`
+	ModelLimitsEnabled bool    `json:"model_limits_enabled"`
+	ModelLimits        string  `json:"model_limits" gorm:"type:text"`
+	AllowIps           *string `json:"allow_ips" gorm:"default:''"`
+	UsedQuota          int     `json:"used_quota" gorm:"default:0"` // used quota
+	Group              string  `json:"group" gorm:"default:''"`
+	CrossGroupRetry    bool    `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
+	AutoGroups         string  `json:"-" gorm:"type:text"`
+	// OAuthClientId records the OAuth application (OAuthClient.ClientId) that minted
+	// this key via POST /oauth2/keys. Empty for keys the user created directly. It
+	// drives the user-vs-application split in the key list and lets the gateway
+	// delete an application's keys itself when the user revokes that application.
+	OAuthClientId string         `json:"oauth_client_id" gorm:"column:oauth_client_id;type:varchar(64);index"`
+	DeletedAt     gorm.DeletedAt `gorm:"index"`
 }
 
 func (token *Token) GetAutoGroups() ([]string, error) {
@@ -103,10 +108,33 @@ func (token *Token) GetIpLimits() []string {
 	return ipLimits
 }
 
-func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
+// Token origin filters distinguish keys minted by an OAuth application (those
+// carrying an OAuthClientId) from keys the user created directly. An empty
+// origin means "no filter".
+const (
+	TokenOriginUser = "user"
+	TokenOriginApp  = "app"
+)
+
+// applyTokenOriginFilter narrows a token query to a single origin. An empty
+// origin (or any unrecognized value) leaves the query unfiltered. Pre-migration
+// rows scan the new column as NULL and count as user-created keys, so the
+// user-origin branch matches both NULL and empty-string values.
+func applyTokenOriginFilter(query *gorm.DB, origin string) *gorm.DB {
+	switch origin {
+	case TokenOriginApp:
+		return query.Where("oauth_client_id IS NOT NULL AND oauth_client_id <> ?", "")
+	case TokenOriginUser:
+		return query.Where("oauth_client_id IS NULL OR oauth_client_id = ?", "")
+	default:
+		return query
+	}
+}
+
+func GetAllUserTokens(userId int, origin string, startIdx int, num int) ([]*Token, error) {
 	var tokens []*Token
-	var err error
-	err = DB.Where("user_id = ?", userId).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
+	query := applyTokenOriginFilter(DB.Where("user_id = ?", userId), origin)
+	err := query.Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
 	return tokens, err
 }
 
@@ -156,7 +184,7 @@ func validateLikePattern(input string) error {
 
 const searchHardLimit = 100
 
-func SearchUserTokens(userId int, keyword string, token string, offset int, limit int) (tokens []*Token, total int64, err error) {
+func SearchUserTokens(userId int, keyword string, token string, origin string, offset int, limit int) (tokens []*Token, total int64, err error) {
 	// model 层强制截断
 	if limit <= 0 || limit > searchHardLimit {
 		limit = searchHardLimit
@@ -184,6 +212,7 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 	}
 
 	baseQuery := DB.Model(&Token{}).Where("user_id = ?", userId)
+	baseQuery = applyTokenOriginFilter(baseQuery, origin)
 
 	// 非空才加 LIKE 条件，空则跳过（不过滤该字段）
 	if keyword != "" {
@@ -441,6 +470,16 @@ func CountUserTokens(userId int) (int64, error) {
 	return total, err
 }
 
+// CountUserTokensByOrigin counts a user's tokens filtered by origin, for the
+// paginated key list. CountUserTokens (unfiltered) remains the source of truth
+// for the per-user key-count limit and must not gain origin awareness.
+func CountUserTokensByOrigin(userId int, origin string) (int64, error) {
+	var total int64
+	query := applyTokenOriginFilter(DB.Model(&Token{}).Where("user_id = ?", userId), origin)
+	err := query.Count(&total).Error
+	return total, err
+}
+
 // BatchDeleteTokens 删除指定用户的一组令牌，返回成功删除数量
 func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	if len(ids) == 0 {
@@ -467,6 +506,43 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 		return 0, err
 	}
 
+	return len(tokens), nil
+}
+
+// deleteTokensByOAuthClientTx soft-deletes relay keys minted by an OAuth client
+// within an existing transaction, invalidating each key's cache entry BEFORE the
+// delete so a revoked key can never be served from a warm Redis cache before its
+// TTL expires. When userId is non-nil the deletion is scoped to that single user
+// (used when one user revokes an application's authorization); when nil, every
+// user's keys for the client are removed (used when the client itself is
+// deleted). If the surrounding transaction later rolls back, the only side
+// effect is a cache miss that re-hydrates from the database. Returns the number
+// of keys deleted.
+func deleteTokensByOAuthClientTx(tx *gorm.DB, clientId string, userId *int) (int, error) {
+	if strings.TrimSpace(clientId) == "" {
+		return 0, nil
+	}
+	var tokens []Token
+	sel := tx.Where("oauth_client_id = ?", clientId)
+	if userId != nil {
+		sel = sel.Where("user_id = ?", *userId)
+	}
+	if err := sel.Find(&tokens).Error; err != nil {
+		return 0, err
+	}
+	if len(tokens) == 0 {
+		return 0, nil
+	}
+	if err := invalidateTokensCache(tokens); err != nil {
+		common.SysLog("failed to invalidate token cache before oauth client key deletion: " + err.Error())
+	}
+	del := tx.Where("oauth_client_id = ?", clientId)
+	if userId != nil {
+		del = del.Where("user_id = ?", *userId)
+	}
+	if err := del.Delete(&Token{}).Error; err != nil {
+		return 0, err
+	}
 	return len(tokens), nil
 }
 

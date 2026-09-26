@@ -174,8 +174,8 @@ func modelRequestSucceeded(c *gin.Context) bool {
 // ModelRequestRateLimit 模型请求限流中间件
 func ModelRequestRateLimit() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		// 在每个请求时检查是否启用限流
-		if !setting.ModelRequestRateLimitEnabled {
+		// 在每个请求时检查是否启用限流；主开关关闭时同样直接放行
+		if common.DisableRateLimit || !setting.ModelRequestRateLimitEnabled {
 			c.Next()
 			return
 		}

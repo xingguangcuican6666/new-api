@@ -37,6 +37,7 @@ const SECURITY_SECTIONS = [
             settings.ModelRequestRateLimitDurationMinutes,
           ModelRequestRateLimitGroup: settings.ModelRequestRateLimitGroup,
           NginxMode: settings.NginxMode,
+          DisableRateLimit: settings.DisableRateLimit,
         }}
       />
     ),

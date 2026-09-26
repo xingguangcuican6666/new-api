@@ -33,18 +33,18 @@ description: "管理员侧的授权服务器系统设置（oauth_server 配置�
   ID Token 的 RSA 私钥（PEM，`signing_key`）及其 JWKS `kid`（`signing_key_id`）。**首次使用时自动生成并持久化**，无需手工配置。其中 `signing_key`（私钥）出于安全考虑不会通过接口回传给前端；`signing_key_id` 是公开的 JWKS `kid`，会在 JWKS 中公布，无需保密。
 </ResponseField>
 
-## 客户端管理接口（管理员）
+## 客户端管理接口
 
-超级管理员可通过以下接口管理客户端应用（面板 `{success, message, data}` 封装，需 RootAuth）：
+登录用户可通过以下接口管理客户端应用（面板 `{success, message, data}` 封装，需 UserAuth）。视图隔离：管理员可查看并管理所有客户端，普通用户只能查看与管理自己创建的客户端（引用他人客户端一律返回"不存在"，避免泄露其存在性）。创建应用需为管理员，或由管理员为该普通用户开启"创建 OAuth 应用"权限：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/oauth-server/scopes` | 获取可授予的 scope 目录（每项含 `oidc` / `sensitive` 标记） |
-| `GET` | `/api/oauth-server/clients` | 列出所有客户端 |
-| `POST` | `/api/oauth-server/clients` | 创建客户端（机密客户端返回一次性 `secret`） |
+| `GET` | `/api/oauth-server/clients` | 列出客户端（管理员看全部，普通用户仅看自己创建的） |
+| `POST` | `/api/oauth-server/clients` | 创建客户端（机密客户端返回一次性 `secret`；需管理员或被授予创建权限） |
 | `GET` | `/api/oauth-server/clients/:id` | 查看客户端 |
 | `PUT` | `/api/oauth-server/clients/:id` | 更新客户端 |
-| `DELETE` | `/api/oauth-server/clients/:id` | 删除客户端（级联删除令牌与授权） |
+| `DELETE` | `/api/oauth-server/clients/:id` | 删除客户端（级联删除其 OAuth 令牌、授权，以及该应用为所有用户创建的 API Key） |
 | `POST` | `/api/oauth-server/clients/:id/rotate-secret` | 轮换客户端密钥（返回一次性新 `secret`） |
 
 ## 用户侧接口（已登录用户）
@@ -54,7 +54,7 @@ description: "管理员侧的授权服务器系统设置（oauth_server 配置�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/oauth-server/authorizations` | 列出已授权的应用及 scope |
-| `DELETE` | `/api/oauth-server/authorizations/:client_id` | 断开某应用（撤销其为该用户签发的全部令牌） |
+| `DELETE` | `/api/oauth-server/authorizations/:client_id` | 断开某应用（撤销其为该用户签发的全部令牌，并删除该应用为该用户创建的全部 API Key） |
 
 <Info>
 `/api/oauth-server/authorize/context`、`/authorize/approve`、`/authorize/deny` 供 New API 前端同意页使用，属内部实现，此处不展开。

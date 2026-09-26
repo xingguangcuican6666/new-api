@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
@@ -51,7 +52,7 @@ import {
   API_KEY_STATUSES,
   ERROR_MESSAGES,
 } from '../constants'
-import type { ApiKey } from '../types'
+import type { ApiKey, ApiKeyOrigin } from '../types'
 import { ApiKeyQuotaCell } from './api-key-quota-cell'
 import { ApiKeyActivityCell } from './api-key-timestamp-cell'
 import {
@@ -157,6 +158,14 @@ function ApiKeysMobileList({
                 <div className='text-sm leading-5 font-semibold break-words'>
                   {apiKey.name}
                 </div>
+                {apiKey.oauth_client_id ? (
+                  <StatusBadge
+                    label={t('Application')}
+                    variant='info'
+                    copyable={false}
+                    className='mt-1 px-0 text-xs font-normal'
+                  />
+                ) : null}
               </div>
               {statusConfig && (
                 <StatusBadge
@@ -220,6 +229,9 @@ export function ApiKeysTable() {
   const { refreshTrigger } = useApiKeys()
   const [now, setNow] = useState(() => Date.now())
   const columns = useApiKeysColumns(now)
+  const search = route.useSearch()
+  const navigate = route.useNavigate()
+  const origin = search.origin
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -228,6 +240,14 @@ export function ApiKeysTable() {
 
     return () => window.clearInterval(intervalId)
   }, [])
+
+  // Persist the source filter as its own URL param; useTableUrlState merges
+  // search functionally, so this stays alongside pagination/filter state.
+  const handleOriginChange = (value?: ApiKeyOrigin) => {
+    navigate({
+      search: (prev) => ({ ...prev, page: undefined, origin: value }),
+    })
+  }
 
   const {
     globalFilter,
@@ -238,8 +258,8 @@ export function ApiKeysTable() {
     onPaginationChange,
     ensurePageInRange,
   } = useTableUrlState({
-    search: route.useSearch(),
-    navigate: route.useNavigate(),
+    search,
+    navigate,
     pagination: { defaultPage: 1, defaultPageSize: 20 },
     globalFilter: { enabled: true, key: 'filter' },
     columnFilters: [
@@ -268,6 +288,7 @@ export function ApiKeysTable() {
       pagination.pageSize,
       globalFilter,
       tokenFilter,
+      origin,
       refreshTrigger,
     ],
     queryFn: async () => {
@@ -275,10 +296,12 @@ export function ApiKeysTable() {
         ? await searchApiKeys({
             keyword: globalFilter,
             token: tokenFilter,
+            origin,
             p: pagination.pageIndex + 1,
             size: pagination.pageSize,
           })
         : await getApiKeys({
+            origin,
             p: pagination.pageIndex + 1,
             size: pagination.pageSize,
           })
@@ -354,13 +377,32 @@ export function ApiKeysTable() {
         searchPlaceholder: t('Filter by name...'),
         searchDebounceMs: 500,
         additionalSearch: (
-          <Input
-            placeholder={t('Filter by API key...')}
-            aria-label={t('Filter by API key...')}
-            value={tokenFilterInput}
-            onChange={(e) => setTokenFilterInput(e.target.value)}
-            className='w-full sm:w-50 lg:w-60'
-          />
+          <>
+            <ToggleGroup
+              value={[origin ?? 'all']}
+              onValueChange={(values) => {
+                if (values.length === 0) return
+                const next = values[0]
+                handleOriginChange(
+                  next === 'user' || next === 'app' ? next : undefined
+                )
+              }}
+              variant='outline'
+              size='sm'
+              aria-label={t('Filter by source')}
+            >
+              <ToggleGroupItem value='all'>{t('All')}</ToggleGroupItem>
+              <ToggleGroupItem value='user'>{t('Personal')}</ToggleGroupItem>
+              <ToggleGroupItem value='app'>{t('Application')}</ToggleGroupItem>
+            </ToggleGroup>
+            <Input
+              placeholder={t('Filter by API key...')}
+              aria-label={t('Filter by API key...')}
+              value={tokenFilterInput}
+              onChange={(e) => setTokenFilterInput(e.target.value)}
+              className='w-full sm:w-50 lg:w-60'
+            />
+          </>
         ),
         filters: [
           {

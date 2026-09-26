@@ -42,6 +42,7 @@ export const userFormSchema = z.object({
   group: z.string().optional(),
   groups: z.array(z.string()),
   remark: z.string().optional(),
+  can_create_oauth_app: z.boolean().optional(),
   admin_permissions: z
     .record(z.string(), z.record(z.string(), z.boolean()))
     .optional(),
@@ -62,6 +63,7 @@ export const USER_FORM_DEFAULT_VALUES: UserFormValues = {
   group: DEFAULT_GROUP,
   groups: [],
   remark: '',
+  can_create_oauth_app: false,
   // Filled against the backend catalog at render time; see UsersMutateDrawer.
   admin_permissions: {},
 }
@@ -107,6 +109,11 @@ export function transformFormDataToPayload(
     payload.id = userId
   }
 
+  // The backend always writes this column (create seeds it, update rewrites it
+  // to persist a revoke), so the value must be sent on every request or an
+  // existing grant would be clobbered to false. Admins/root ignore the flag.
+  payload.can_create_oauth_app = data.can_create_oauth_app ?? false
+
   return payload
 }
 
@@ -130,6 +137,7 @@ export function transformUserToFormDefaults(user: User): UserFormValues {
           .filter(Boolean)
       : [],
     remark: user.remark || '',
+    can_create_oauth_app: user.can_create_oauth_app ?? false,
     admin_permissions: user.admin_permissions ?? {},
   }
 }

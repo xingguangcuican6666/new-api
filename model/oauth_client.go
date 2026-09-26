@@ -159,8 +159,9 @@ func (c *OAuthClient) Update() error {
 	return DB.Model(c).Omit("id", "created_at", "owner_user_id").Save(c).Error
 }
 
-// DeleteOAuthClient removes a client together with all tokens and grants issued
-// for it, so revocation is complete.
+// DeleteOAuthClient removes a client together with all OAuth tokens, consent
+// grants, AND relay API keys minted for it (across every user), so deleting an
+// application leaves no usable credential behind.
 func DeleteOAuthClient(id int) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
 		client, err := GetOAuthClientById(id)
@@ -171,6 +172,9 @@ func DeleteOAuthClient(id int) error {
 			return err
 		}
 		if err := tx.Where("client_id = ?", client.ClientId).Delete(&OAuthUserGrant{}).Error; err != nil {
+			return err
+		}
+		if _, err := deleteTokensByOAuthClientTx(tx, client.ClientId, nil); err != nil {
 			return err
 		}
 		return tx.Delete(&OAuthClient{}, id).Error

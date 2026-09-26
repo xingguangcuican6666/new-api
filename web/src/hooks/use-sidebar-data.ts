@@ -174,7 +174,9 @@ export function useSidebarData(): SidebarData {
             title: t('OAuth Applications'),
             url: '/oauth-apps',
             icon: AppWindow,
-            requiredRole: ROLE.SUPER_ADMIN,
+            requiredRole: ROLE.ADMIN,
+            // Common users with the admin-granted create permission also see it.
+            requiredCapability: (user) => Boolean(user?.can_create_oauth_app),
           },
           {
             title: t('System Settings'),

@@ -63,7 +63,7 @@ func EmailVerificationRateLimit() gin.HandlerFunc {
 	// outage cannot race the in-memory limiter's first initialization.
 	inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
 	return func(c *gin.Context) {
-		if common.NginxMode {
+		if common.NginxMode || common.DisableRateLimit {
 			c.Next()
 			return
 		}

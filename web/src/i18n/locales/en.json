@@ -3768,6 +3768,8 @@
     "Next page": "Next page",
     "Next reset": "Next reset",
     "Nginx mode (behind a reverse proxy)": "Nginx mode (behind a reverse proxy)",
+    "Disable all rate limiting": "Disable all rate limiting",
+    "Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.": "Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.",
     "No": "No",
     "No About Content Set": "No About Content Set",
     "No Active": "No Active",
@@ -7063,6 +7065,11 @@
     "Update application": "Update application",
     "Update how this application appears and what it may request.": "Update how this application appears and what it may request.",
     "Users are only redirected to an exact match of one of these URIs.": "Users are only redirected to an exact match of one of these URIs.",
-    "Where users return after authorizing and what the application may access": "Where users return after authorizing and what the application may access"
+    "Where users return after authorizing and what the application may access": "Where users return after authorizing and what the application may access",
+    "Filter by source": "Filter by source",
+    "Allow creating OAuth applications": "Allow creating OAuth applications",
+    "Let this user register their own OAuth applications. Admins can always create applications.": "Let this user register their own OAuth applications. Admins can always create applications.",
+    "Application disconnected and its API keys removed": "Application disconnected and its API keys removed",
+    "Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again.": "Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again."
   }
 }

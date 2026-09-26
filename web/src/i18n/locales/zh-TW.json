@@ -3768,6 +3768,8 @@
     "Next page": "下一頁",
     "Next reset": "下一次重置",
     "Nginx mode (behind a reverse proxy)": "Nginx 模式（部署於反向代理之後）",
+    "Disable all rate limiting": "關閉全部速率限制",
+    "Master switch for deployments behind two or three proxy layers, where every client still shares one address even after Nginx mode. It turns off all request-rate limiting — both the address-keyed limits (global web/API, critical, email verification, upload/download, task artifacts) and the per-user limits Nginx mode leaves active (model requests, sensitive-action and search limits). Concurrency caps and account brute-force lockouts (2FA, email binding, sessions) stay in force. Leave this off unless a proxy already rate-limits traffic; equivalent to the DISABLE_RATE_LIMIT environment variable.": "適用於經過兩三層代理、所有用戶端在 Nginx 模式後仍共用同一位址的部署的總開關。開啟後關閉全部請求速率限制——既包括按位址計數的限制（全域 Web/API、關鍵操作、郵件驗證、上傳/下載、任務產物），也包括 Nginx 模式仍保留的按使用者限制（模型請求、敏感操作與搜尋限制）。並行上限與帳號防爆破鎖定（兩步驗證、郵箱綁定、工作階段）仍然生效。除非代理已對流量限速，否則請保持關閉；等同於 DISABLE_RATE_LIMIT 環境變數。",
     "No": "否",
     "No About Content Set": "未設定關於內容",
     "No Active": "無生效",
@@ -7063,6 +7065,11 @@
     "Update application": "更新應用程式",
     "Update how this application appears and what it may request.": "更新此應用程式的顯示方式及其可請求的內容。",
     "Users are only redirected to an exact match of one of these URIs.": "使用者只會被重新導向到與這些 URI 之一完全相符的位址。",
-    "Where users return after authorizing and what the application may access": "使用者授權後返回的位址，以及應用程式可以存取的內容"
+    "Where users return after authorizing and what the application may access": "使用者授權後返回的位址，以及應用程式可以存取的內容",
+    "Filter by source": "依來源篩選",
+    "Allow creating OAuth applications": "允許建立 OAuth 應用程式",
+    "Let this user register their own OAuth applications. Admins can always create applications.": "允許此使用者註冊自己的 OAuth 應用程式。管理員始終可以建立應用程式。",
+    "Application disconnected and its API keys removed": "已中斷應用程式連線並刪除其 API 金鑰",
+    "Disconnecting {{name}} immediately revokes its access and deletes any API keys it created for you. The gateway removes those keys itself, not the application. You can reconnect it later by authorizing again.": "中斷 {{name}} 會立即撤銷其存取權限，並刪除它為你建立的所有 API 金鑰。這些金鑰由閘道自行刪除，而非應用程式。之後你可以透過重新授權再次連線。"
   }
 }

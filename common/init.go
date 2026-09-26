@@ -146,6 +146,7 @@ func InitEnv() {
 	if nginxModeEnv, err := strconv.ParseBool(os.Getenv("NGINX_MODE")); err == nil {
 		NginxMode = nginxModeEnv
 	}
+	DisableRateLimit = GetEnvOrDefaultBool("DISABLE_RATE_LIMIT", false)
 	initConstantEnv()
 }
 

@@ -62,6 +62,7 @@ export const userSchema = z.object({
   remark: z.string().optional(),
   pending_ban_reason: z.string().optional(),
   pending_ban_deadline: z.number().optional(),
+  can_create_oauth_app: z.boolean().optional(),
   admin_permissions: z
     .record(z.string(), z.record(z.string(), z.boolean()))
     .optional(),
@@ -129,6 +130,7 @@ export interface UserFormData {
   group?: string // Only used when updating user
   groups?: string // Comma-separated additional groups, only used when updating user
   remark?: string // Only used when updating user
+  can_create_oauth_app?: boolean // Whether a common user may create OAuth applications
   admin_permissions?: AdminPermissionMatrix
 }
 
